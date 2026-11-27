@@ -1,0 +1,184 @@
+<mxfile host="app.diagrams.net" modified="2024-05-15T10:02:10.018Z" agent="Mozilla/5.0 (X11; Linux x86_64; rv:124.0) Gecko/20100101 Firefox/124.0" etag="pcNnr0vhQBYF8sHyKjVv" version="24.0.7" type="device">
+  <diagram name="Page-1" id="Kpdd1LrfvKu2WPj11BUy">
+    <mxGraphModel dx="2284" dy="1957" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="A5JcdadiDorsnNUClVau-1" value="&lt;div&gt;Trust Anchor&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="-125" y="300" width="260" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-2" value="Trusted Issuers List" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="-5" y="360" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-3" value="MySQL" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;" vertex="1" parent="1">
+          <mxGeometry x="-105" y="350" width="60" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-5" value="&lt;div&gt;Data Consumer&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="-190" y="-70" width="390" height="320" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-13" value="&lt;div&gt;Data Provider&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="340" y="-70" width="740" height="560" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-28" value="" style="endArrow=classic;html=1;rounded=0;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;entryPerimeter=0;" edge="1" parent="1" source="A5JcdadiDorsnNUClVau-2" target="A5JcdadiDorsnNUClVau-3">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="-225" y="540" as="sourcePoint" />
+            <mxPoint x="-175" y="490" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-41" value="" style="group" vertex="1" connectable="0" parent="1">
+          <mxGeometry x="-130" y="-20" width="270" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-11" value="&lt;div&gt;Issuer&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="A5JcdadiDorsnNUClVau-41">
+          <mxGeometry width="270" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-6" value="&lt;div&gt;Keycloak&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="A5JcdadiDorsnNUClVau-41">
+          <mxGeometry x="135" y="40" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-33" value="" style="endArrow=classic;html=1;rounded=0;exitX=0;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="A5JcdadiDorsnNUClVau-41" source="A5JcdadiDorsnNUClVau-6">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="-190" y="50" as="sourcePoint" />
+            <mxPoint x="90" y="70" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-39" value="Postgres" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;" vertex="1" parent="A5JcdadiDorsnNUClVau-41">
+          <mxGeometry x="30" y="30" width="60" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-42" value="" style="group" vertex="1" connectable="0" parent="1">
+          <mxGeometry x="780" y="40" width="270" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-43" value="&lt;div&gt;Issuer&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="A5JcdadiDorsnNUClVau-42">
+          <mxGeometry width="270" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-44" value="&lt;div&gt;Keycloak&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="A5JcdadiDorsnNUClVau-42">
+          <mxGeometry x="135" y="40" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-45" value="" style="endArrow=classic;html=1;rounded=0;exitX=0;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="A5JcdadiDorsnNUClVau-42" source="A5JcdadiDorsnNUClVau-44">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="-190" y="50" as="sourcePoint" />
+            <mxPoint x="90" y="70" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-46" value="Postgres" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;" vertex="1" parent="A5JcdadiDorsnNUClVau-42">
+          <mxGeometry x="30" y="30" width="60" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-49" value="" style="group" vertex="1" connectable="0" parent="1">
+          <mxGeometry x="-130" y="110" width="270" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-12" value="&lt;div&gt;Data Plane&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="A5JcdadiDorsnNUClVau-49">
+          <mxGeometry width="270" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-9" value="Scorpio" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="A5JcdadiDorsnNUClVau-49">
+          <mxGeometry x="135" y="40" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-34" value="" style="endArrow=classic;html=1;rounded=0;exitX=0;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="A5JcdadiDorsnNUClVau-49" source="A5JcdadiDorsnNUClVau-9">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="-150" y="240" as="sourcePoint" />
+            <mxPoint x="90" y="70" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-40" value="Postgis" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;" vertex="1" parent="A5JcdadiDorsnNUClVau-49">
+          <mxGeometry x="30" y="30" width="60" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-50" value="" style="group" vertex="1" connectable="0" parent="1">
+          <mxGeometry x="780" y="300" width="270" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-51" value="&lt;div&gt;Data Plane&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="A5JcdadiDorsnNUClVau-50">
+          <mxGeometry width="270" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-52" value="Scorpio" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="A5JcdadiDorsnNUClVau-50">
+          <mxGeometry x="135" y="40" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-53" value="" style="endArrow=classic;html=1;rounded=0;exitX=0;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="A5JcdadiDorsnNUClVau-50" source="A5JcdadiDorsnNUClVau-52">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="-150" y="240" as="sourcePoint" />
+            <mxPoint x="90" y="70" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-54" value="Postgis" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;" vertex="1" parent="A5JcdadiDorsnNUClVau-50">
+          <mxGeometry x="30" y="30" width="60" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-56" value="" style="group" vertex="1" connectable="0" parent="1">
+          <mxGeometry x="380" y="230" width="340" height="240" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-35" value="&lt;div&gt;Authentication&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="A5JcdadiDorsnNUClVau-56">
+          <mxGeometry width="340" height="240" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-36" value="" style="group" vertex="1" connectable="0" parent="A5JcdadiDorsnNUClVau-56">
+          <mxGeometry x="30" y="40" width="280" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-24" value="&lt;div&gt;VCVerifier&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="A5JcdadiDorsnNUClVau-36">
+          <mxGeometry width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-25" value="Credentials Config Service" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="A5JcdadiDorsnNUClVau-36">
+          <mxGeometry x="160" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-26" value="Trusted Issuers List" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="A5JcdadiDorsnNUClVau-36">
+          <mxGeometry y="110" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-29" value="" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="A5JcdadiDorsnNUClVau-36" source="A5JcdadiDorsnNUClVau-24" target="A5JcdadiDorsnNUClVau-25">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="-140" y="180" as="sourcePoint" />
+            <mxPoint x="-90" y="130" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-30" value="" style="endArrow=classic;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="A5JcdadiDorsnNUClVau-36" source="A5JcdadiDorsnNUClVau-24" target="A5JcdadiDorsnNUClVau-26">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="-100" y="160" as="sourcePoint" />
+            <mxPoint x="-50" y="110" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-31" value="" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryPerimeter=0;" edge="1" parent="A5JcdadiDorsnNUClVau-36" source="A5JcdadiDorsnNUClVau-26" target="A5JcdadiDorsnNUClVau-55">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="80" y="230" as="sourcePoint" />
+            <mxPoint x="160" y="130" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-32" value="" style="endArrow=classic;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="A5JcdadiDorsnNUClVau-36" source="A5JcdadiDorsnNUClVau-25">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="-160" y="210" as="sourcePoint" />
+            <mxPoint x="220" y="100" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-55" value="MySQL" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;" vertex="1" parent="A5JcdadiDorsnNUClVau-36">
+          <mxGeometry x="190" y="100" width="60" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-67" value="" style="group" vertex="1" connectable="0" parent="1">
+          <mxGeometry x="380" y="-30" width="340" height="240" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-57" value="&lt;div&gt;Authorization&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="A5JcdadiDorsnNUClVau-67">
+          <mxGeometry width="340" height="240" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-58" value="Postgres" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;" vertex="1" parent="A5JcdadiDorsnNUClVau-67">
+          <mxGeometry x="220" y="140" width="60" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-59" value="ODRL-PAP" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="A5JcdadiDorsnNUClVau-67">
+          <mxGeometry x="190" y="40" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-60" value="ApiSix" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="A5JcdadiDorsnNUClVau-67">
+          <mxGeometry x="30" y="150" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-61" value="Open Policy Agent" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="A5JcdadiDorsnNUClVau-67">
+          <mxGeometry x="30" y="40" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-64" value="" style="endArrow=classic;html=1;rounded=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="A5JcdadiDorsnNUClVau-67" source="A5JcdadiDorsnNUClVau-60" target="A5JcdadiDorsnNUClVau-61">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="-110" y="180" as="sourcePoint" />
+            <mxPoint x="-60" y="130" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-65" value="" style="endArrow=classic;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="A5JcdadiDorsnNUClVau-67" source="A5JcdadiDorsnNUClVau-61" target="A5JcdadiDorsnNUClVau-59">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="-110" y="70" as="sourcePoint" />
+            <mxPoint x="-60" y="20" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="A5JcdadiDorsnNUClVau-66" value="" style="endArrow=classic;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;entryPerimeter=0;" edge="1" parent="A5JcdadiDorsnNUClVau-67" source="A5JcdadiDorsnNUClVau-59" target="A5JcdadiDorsnNUClVau-58">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="490" y="40" as="sourcePoint" />
+            <mxPoint x="540" y="-10" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

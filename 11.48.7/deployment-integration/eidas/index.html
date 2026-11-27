@@ -1,0 +1,4566 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Documentation for deploying and integrating the FIWARE Data Space Connector">
+      
+      
+      
+        <link rel="canonical" href="https://fiware.github.io/data-space-connector/11.48.7/deployment-integration/eidas/">
+      
+      
+        <link rel="prev" href="../observability/">
+      
+      
+        <link rel="next" href="../../keycloak/oid4vc-protocol-mappers/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>eIDAS 2.0 Compliance - FIWARE Data Space Connector</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="teal">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#eidas-20-compliance-eu-trusted-list-validation" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="FIWARE Data Space Connector" class="md-header__button md-logo" aria-label="FIWARE Data Space Connector" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            FIWARE Data Space Connector
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              eIDAS 2.0 Compliance
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="teal"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="teal"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/FIWARE/data-space-connector" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    FIWARE/data-space-connector
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../local-deployment/LOCAL/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Get Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../roles/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Deploy by Role
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../flows/contract-management/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Concepts & Flows
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../production/VAULT/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Operations & Production
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../glossary/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../adr/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Contribute
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="FIWARE Data Space Connector" class="md-nav__button md-logo" aria-label="FIWARE Data Space Connector" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    FIWARE Data Space Connector
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/FIWARE/data-space-connector" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    FIWARE/data-space-connector
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Get Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Get Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../local-deployment/LOCAL/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start (Local Deployment)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../roles/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deploy by Role
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Deploy by Role
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../roles/PREREQUISITES/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cluster Prerequisites
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../roles/KEYCLOAK/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Keycloak Setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../roles/consumer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Consumer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../roles/provider/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Provider
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../roles/provider/LOCAL_MARKETPLACE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Provider — Local Marketplace
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../roles/provider/COMPOSED_SPECIFICATIONS/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Provider — Composed Specifications
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../roles/consumer-provider/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Consumer + Provider
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../roles/operator/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operator (Data Space Governance)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../flows/contract-management/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts & Flows
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Concepts & Flows
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../flows/contract-management/tmf/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TMForum Contract Management Example
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../flows/service-interaction-m2m/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    M2M Service Interaction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../CONSENT_MANAGEMENT/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Consent Management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../CONTRACT_NEGOTIATION/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contract Negotiation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../DSP_INTEGRATION/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    DSP Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../MARKETPLACE_INTEGRATION/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Marketplace Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../CENTRAL_MARKETPLACE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Central Marketplace
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../RAINBOW_INTEGRATION/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rainbow Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../observability/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations & Production
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operations & Production
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../production/VAULT/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Production (Vault & Identity)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    eIDAS 2.0 Compliance
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    eIDAS 2.0 Compliance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#two-mechanisms-different-triggers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two mechanisms, different triggers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Architecture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#supported-did-methods-and-issuance-approaches" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Supported DID Methods and Issuance Approaches
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#validation-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Validation Flow
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration----provider-verifier" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration -- Provider (Verifier)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Configuration -- Provider (Verifier)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#enabling-eidas-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Enabling eIDAS Validation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configuration-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration Reference
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#production-vs-test-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Production vs. Test Settings
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration----consumer-issuer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration -- Consumer (Issuer)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Configuration -- Consumer (Issuer)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#keycloak-elsi-block" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keycloak elsi Block
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#jades-plugin-for-x5c-header-injection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        JAdES Plugin for x5c Header Injection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#keystore-volume-mount" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keystore Volume Mount
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#preparation----generating-test-certificates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Preparation -- Generating Test Certificates
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Preparation -- Generating Test Certificates">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Steps
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#certificate-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Certificate Requirements
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#turning-validation-on-eidasconfig-per-credential-type" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Turning Validation On: eidasConfig per Credential Type
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Turning Validation On: eidasConfig per Credential Type">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-format-constraint-sd-jwt-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The format constraint: SD-JWT only
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#x5c-and-the-trust-anchor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        x5c and the trust anchor
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#certificate-revocation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Certificate Revocation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#trust-list-freshness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Trust List Freshness
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#local-deployment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Local Deployment
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mocking-the-eu-trusted-list-local-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mocking the EU Trusted List (local only)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#demo-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Demo Flow
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Demo Flow">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-confirm-the-verifier-started" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Confirm the verifier started
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-confirm-the-protected-endpoint-rejects-anonymous-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Confirm the protected endpoint rejects anonymous access
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-issue-a-credential-from-the-consumer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Issue a credential from the consumer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-verify-the-eidas-properties-of-the-credential" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Verify the eIDAS properties of the credential
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-create-a-holder-did" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Create a holder DID
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6-exchange-the-credential-for-an-access-token" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Exchange the credential for an access token
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#7-access-the-protected-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Access the protected data
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#8-confirm-that-validation-actually-bites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Confirm that validation actually bites
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#migration-from-dss-based-approach" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Migration from DSS-based Approach
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Migration from DSS-based Approach">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#migration-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Migration Steps
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#before--after-comparison" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Before / After Comparison
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rollback" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rollback
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Troubleshooting
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#common-error-scenarios" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common Error Scenarios
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#debugging-tips" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Debugging Tips
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../keycloak/oid4vc-protocol-mappers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Keycloak OID4VC Protocol Mappers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../GAIA_X/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gaia-X
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../aws-garnet/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AWS Garnet Framework
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5_6" id="__nav_5_6_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    AWS Garnet Framework
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../aws-garnet/scenario-1-deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scenario 1
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../aws-garnet/scenario-2-deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scenario 2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../glossary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Glossary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_2" id="__nav_6_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Notes
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Release Notes
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../release-notes/11-x/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    11.x
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../release-notes/10-x/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    10.x
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../release-notes/9-x/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    9.x
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../release-notes/8-x/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    8.x
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contribute
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Contribute
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_1" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../adr/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture Decisions
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7_1" id="__nav_7_1_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture Decisions
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0001-oid4vp-for-participant-authentication/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0001: OID4VP for Participant Authentication
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0002-reuse-facade-oid4vp-client/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0002: Reuse Facade OID4VP Client
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0003-token-endpoint-not-consent-proxy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0003: Token Endpoint, not Consent Proxy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0004-map-oid4vp-tokens-to-participants-by-did/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0004: Map OID4VP Tokens to Participants by DID
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0005-vc-based-participant-onboarding/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0005: VC-based Participant Onboarding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0006-eidas-validation-in-vcverifier/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0006: eIDAS Validation in VCVerifier
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0007-test-both-deployment-paths/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0007: Test Both Deployment Paths
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0008-dsc-consent-manager/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0008: DSC Consent Manager
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ONGOING_WORK/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ongoing Work
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#two-mechanisms-different-triggers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two mechanisms, different triggers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Architecture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#supported-did-methods-and-issuance-approaches" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Supported DID Methods and Issuance Approaches
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#validation-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Validation Flow
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration----provider-verifier" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration -- Provider (Verifier)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Configuration -- Provider (Verifier)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#enabling-eidas-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Enabling eIDAS Validation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configuration-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration Reference
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#production-vs-test-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Production vs. Test Settings
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration----consumer-issuer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration -- Consumer (Issuer)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Configuration -- Consumer (Issuer)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#keycloak-elsi-block" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keycloak elsi Block
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#jades-plugin-for-x5c-header-injection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        JAdES Plugin for x5c Header Injection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#keystore-volume-mount" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keystore Volume Mount
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#preparation----generating-test-certificates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Preparation -- Generating Test Certificates
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Preparation -- Generating Test Certificates">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Steps
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#certificate-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Certificate Requirements
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#turning-validation-on-eidasconfig-per-credential-type" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Turning Validation On: eidasConfig per Credential Type
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Turning Validation On: eidasConfig per Credential Type">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-format-constraint-sd-jwt-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The format constraint: SD-JWT only
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#x5c-and-the-trust-anchor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        x5c and the trust anchor
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#certificate-revocation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Certificate Revocation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#trust-list-freshness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Trust List Freshness
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#local-deployment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Local Deployment
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mocking-the-eu-trusted-list-local-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mocking the EU Trusted List (local only)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#demo-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Demo Flow
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Demo Flow">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-confirm-the-verifier-started" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Confirm the verifier started
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-confirm-the-protected-endpoint-rejects-anonymous-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Confirm the protected endpoint rejects anonymous access
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-issue-a-credential-from-the-consumer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Issue a credential from the consumer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-verify-the-eidas-properties-of-the-credential" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Verify the eIDAS properties of the credential
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-create-a-holder-did" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Create a holder DID
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6-exchange-the-credential-for-an-access-token" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Exchange the credential for an access token
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#7-access-the-protected-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Access the protected data
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#8-confirm-that-validation-actually-bites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Confirm that validation actually bites
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#migration-from-dss-based-approach" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Migration from DSS-based Approach
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Migration from DSS-based Approach">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#migration-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Migration Steps
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#before--after-comparison" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Before / After Comparison
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rollback" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rollback
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Troubleshooting
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#common-error-scenarios" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common Error Scenarios
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#debugging-tips" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Debugging Tips
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/FIWARE/data-space-connector/edit/main/doc/deployment-integration/eidas/README.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="eidas-20-compliance-eu-trusted-list-validation">eIDAS 2.0 Compliance: EU Trusted List Validation<a class="headerlink" href="#eidas-20-compliance-eu-trusted-list-validation" title="Permanent link">&para;</a></h1>
+<p>The FIWARE Data Space Connector supports
+<a href="https://digital-strategy.ec.europa.eu/en/policies/eidas-regulation">eIDAS 2.0</a>
+compliance through PKIX certificate chain validation against the
+<a href="https://digital-strategy.ec.europa.eu/en/policies/eu-trusted-lists">EU Trusted Lists (ETSI TS 119 612)</a>.
+Starting with <strong>VCVerifier &gt;= 6.22.0</strong> this validation is performed natively by
+VCVerifier. The configuration surface documented here needs
+<strong>decentralized-iam &gt;= 2.1.25</strong>, which is what chart 10.10.0 pins: 2.1.25 is the
+first release whose vcverifier subchart spells the LOTL override <code>lotlUrl</code>, the
+key the server actually reads.</p>
+<h2 id="two-mechanisms-different-triggers">Two mechanisms, different triggers<a class="headerlink" href="#two-mechanisms-different-triggers" title="Permanent link">&para;</a></h2>
+<p>Carrying an <code>x5c</code> header is <strong>not</strong> by itself enough to get a credential
+validated against the trust list. VCVerifier has two separate paths, and which
+one applies depends on the issuer and the credential format:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Trigger</th>
+<th>Covers</th>
+<th>Needs <code>eidasConfig</code>?</th>
+<th>Formats</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>1. <code>did:elsi</code> proof check</strong></td>
+<td><code>iss</code> is a <code>did:elsi:</code> DID</td>
+<td>The issuer-signed JWT's <code>x5c</code> chain, plus an <code>organizationIdentifier</code> (OID 2.5.4.97) ↔ DID match</td>
+<td>No</td>
+<td>Any</td>
+</tr>
+<tr>
+<td><strong>2. <code>EidasValidationService</code></strong></td>
+<td>The credential type carries <code>eidasConfig.enabled: true</code></td>
+<td>The credential's <code>x5c</code> chain, with per-type country and qualified-service filters</td>
+<td>Yes</td>
+<td><strong>SD-JWT only</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Both require the verifier-wide <code>eidas</code> block to be enabled -- that is what
+builds the trust store.</p>
+<p>What this means in practice:</p>
+<ul>
+<li><strong><code>did:elsi</code> issuers</strong> get trust-list validation automatically, for any
+  format, as soon as <code>eidas.enabled</code> is <code>true</code>. If the trust store is missing,
+  the credential is rejected with <code>eidas_trust_store_required_for_did_elsi</code>
+  rather than silently accepted.</li>
+<li><strong><code>did:web</code> and HTTPS issuers</strong> resolve their signing key from the DID
+  document or the issuer's JWKS. The <code>x5c</code> header, if present, is <strong>ignored</strong>
+  by the proof check. The only way such a credential is validated against the
+  trust list is mechanism 2 -- which means it has to be an SD-JWT <em>and</em> carry
+  <code>eidasConfig</code>.</li>
+<li><strong>Mechanism 2 adds per-type control</strong> (<code>allowedCountries</code>,
+  <code>requireQualified</code>) that mechanism 1 has no equivalent for: the <code>did:elsi</code>
+  path searches all countries and applies no qualified-service filter.</li>
+</ul>
+<p>The two compose. A <code>did:elsi</code> SD-JWT with <code>eidasConfig</code> goes through both, and
+both have to pass.</p>
+<p>eIDAS support is <strong>disabled by default</strong> and is strictly opt-in.</p>
+<hr />
+<details>
+<summary><strong>Table of Contents</strong></summary>
+
+- [Two mechanisms, different triggers](#two-mechanisms-different-triggers)
+- [Architecture](#architecture)
+  - [Supported DID Methods and Issuance Approaches](#supported-did-methods-and-issuance-approaches)
+  - [Validation Flow](#validation-flow)
+- [Configuration -- Provider (Verifier)](#configuration----provider-verifier)
+  - [Enabling eIDAS Validation](#enabling-eidas-validation)
+  - [Configuration Reference](#configuration-reference)
+  - [Production vs. Test Settings](#production-vs-test-settings)
+- [Configuration -- Consumer (Issuer)](#configuration----consumer-issuer)
+  - [Keycloak elsi Block](#keycloak-elsi-block)
+  - [JAdES Plugin for x5c Header Injection](#jades-plugin-for-x5c-header-injection)
+  - [Keystore Volume Mount](#keystore-volume-mount)
+- [Preparation -- Generating Test Certificates](#preparation----generating-test-certificates)
+- [Turning Validation On: `eidasConfig` per Credential Type](#turning-validation-on-eidasconfig-per-credential-type)
+- [Certificate Revocation](#certificate-revocation)
+- [Trust List Freshness](#trust-list-freshness)
+- [Local Deployment](#local-deployment)
+- [Mocking the EU Trusted List (local only)](#mocking-the-eu-trusted-list-local-only)
+- [Demo Flow](#demo-flow)
+- [Migration from DSS-based Approach](#migration-from-dss-based-approach)
+- [Troubleshooting](#troubleshooting)
+
+</details>
+
+<hr />
+<h2 id="architecture">Architecture<a class="headerlink" href="#architecture" title="Permanent link">&para;</a></h2>
+<p>eIDAS 2.0 support in the Data Space Connector involves two roles:</p>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Component</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Consumer (Issuer)</strong></td>
+<td>Keycloak + JAdES plugin</td>
+<td>Issues Verifiable Credentials signed with an eIDAS certificate. The <code>x5c</code> JWT header carries the full certificate chain. The credential's <code>iss</code> claim can use <code>did:elsi</code>, <code>did:web</code>, or an HTTPS identifier.</td>
+</tr>
+<tr>
+<td><strong>Provider (Verifier)</strong></td>
+<td>VCVerifier</td>
+<td>Validates incoming credentials that carry an <code>x5c</code> header by verifying the JWT signature against the certificate chain, then validating that chain against a trust store built from the EU List of Trusted Lists (LOTL). For <code>did:elsi</code>, the certificate's <code>organizationIdentifier</code> is additionally matched against the DID.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="supported-did-methods-and-issuance-approaches">Supported DID Methods and Issuance Approaches<a class="headerlink" href="#supported-did-methods-and-issuance-approaches" title="Permanent link">&para;</a></h3>
+<p>Trust-list validation is reachable from more than one DID method, but not on
+the same terms -- see <a href="#two-mechanisms-different-triggers">Two mechanisms</a>:</p>
+<table>
+<thead>
+<tr>
+<th>Approach</th>
+<th>Identifier Example</th>
+<th>How the chain gets validated</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>did:elsi</code></td>
+<td><code>did:elsi:VATDE-1234567</code></td>
+<td>Automatically, via the <code>did:elsi</code> proof check. Also requires the leaf's <code>organizationIdentifier</code> (OID 2.5.4.97) to match the DID. <code>eidasConfig</code> optionally layers per-type filters on top.</td>
+</tr>
+<tr>
+<td><code>did:web</code></td>
+<td><code>did:web:example.com</code></td>
+<td><strong>Only</strong> via <code>eidasConfig</code> on an SD-JWT credential type. The signing key comes from the DID document and the <code>x5c</code> header is otherwise ignored.</td>
+</tr>
+<tr>
+<td>HTTPS</td>
+<td><code>https://issuer.example.com</code></td>
+<td><strong>Only</strong> via <code>eidasConfig</code> on an SD-JWT credential type. The signing key comes from the issuer's JWKS.</td>
+</tr>
+</tbody>
+</table>
+<p>The examples in this document use <code>did:elsi</code> because it is the most
+tightly coupled with eIDAS certificates. For <code>did:web</code> and HTTPS issuers, a
+credential in any other format -- or without <code>eidasConfig</code> -- gets no
+trust-list validation at all, however complete its <code>x5c</code> chain is.</p>
+<h3 id="validation-flow">Validation Flow<a class="headerlink" href="#validation-flow" title="Permanent link">&para;</a></h3>
+<p>When VCVerifier receives a credential with an <code>x5c</code> header, it performs
+the following steps:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>Credential (JWT with x5c header)
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>        |
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>        v
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>  1. Extract x5c certificate chain from JWT header
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>        |
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>        v
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>  2. Verify JWT signature against the leaf certificate
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>        |
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>        v
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>  3. (did:elsi only) Extract organizationIdentifier (OID 2.5.4.97)
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>     from the leaf certificate's Subject DN and match against the
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>     did:elsi identifier (e.g., did:elsi:VATDE-1234567 -&gt; VATDE-1234567)
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>        |
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>        v
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>  4. Validate the certificate chain (PKIX) against the trust store
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>     built from the EU LOTL
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>        |
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>        v
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>  5. (Optional) Check certificate revocation status via OCSP/CRL
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>        |
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>        v
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>  Credential accepted or rejected
+</code></pre></div>
+<p>The trust store is built at startup by fetching the EU LOTL, parsing the
+national Trusted Lists it references, and extracting the certificates of
+Qualified Trust Service Providers. It is refreshed periodically in the
+background (see <a href="#trust-list-freshness">Trust List Freshness</a>).</p>
+<hr />
+<h2 id="configuration----provider-verifier">Configuration -- Provider (Verifier)<a class="headerlink" href="#configuration----provider-verifier" title="Permanent link">&para;</a></h2>
+<p>The provider runs VCVerifier, which validates incoming credentials
+carrying eIDAS certificate chains. Two configuration blocks are relevant:</p>
+<ol>
+<li><code>decentralizedIam.vcAuthentication.vcverifier.deployment.elsi</code> --
+   enables the <code>did:elsi</code> DID method in the verifier (only needed when
+   using <code>did:elsi</code>; not required for <code>did:web</code> or HTTPS issuers).</li>
+<li><code>decentralizedIam.vcAuthentication.vcverifier.deployment.eidas</code> --
+   configures the built-in PKIX trust list validation (required for all
+   eIDAS approaches).</li>
+</ol>
+<h3 id="enabling-eidas-validation">Enabling eIDAS Validation<a class="headerlink" href="#enabling-eidas-validation" title="Permanent link">&para;</a></h3>
+<p>Minimal <code>values.yaml</code> overlay to enable eIDAS validation with <code>did:elsi</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">decentralizedIam</span><span class="p">:</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">vcAuthentication</span><span class="p">:</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="nt">vcverifier</span><span class="p">:</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">      </span><span class="nt">deployment</span><span class="p">:</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">        </span><span class="nt">elsi</span><span class="p">:</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">          </span><span class="c1"># Enable did:elsi DID method support (omit if using did:web or HTTPS)</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">          </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">        </span><span class="nt">eidas</span><span class="p">:</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">          </span><span class="c1"># Enable built-in eIDAS 2.0 trust list validation</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">          </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</code></pre></div>
+<p>When <code>eidas.enabled</code> is <code>true</code>, VCVerifier fetches the EU LOTL at startup and
+builds a trust store from it. No external validation service is needed.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><strong>For a <code>did:elsi</code> issuer this is already enough</strong> -- the proof check validates
+the chain on the issuer DID alone. <strong>For a <code>did:web</code> or HTTPS issuer it is
+not:</strong> their <code>x5c</code> header is ignored by the proof check, so the credential has
+to be an SD-JWT carrying <code>eidasConfig</code> before anything is checked. See
+<a href="#turning-validation-on-eidasconfig-per-credential-type">Turning Validation On</a>.
+<code>eidasConfig</code> is also what adds per-type country and qualified-service filters,
+which <code>did:elsi</code> deployments otherwise do not get.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The <code>elsi.enabled</code> toggle is only needed when the issuer uses
+the <code>did:elsi</code> DID method. For <code>did:web</code> or HTTPS-issued credentials,
+only the <code>eidas</code> block is required.</p>
+</div>
+<h3 id="configuration-reference">Configuration Reference<a class="headerlink" href="#configuration-reference" title="Permanent link">&para;</a></h3>
+<p>All values live under <code>decentralizedIam.vcAuthentication.vcverifier.deployment.eidas</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>enabled</code></td>
+<td>bool</td>
+<td><code>false</code></td>
+<td>Starts the trust-list fetcher and builds the trust store. Required for any eIDAS verification, but <strong>not sufficient</strong> -- see <a href="#turning-validation-on-eidasconfig-per-credential-type">Turning Validation On</a>. With it <code>false</code>, a per-credential <code>eidasConfig</code> is rejected with HTTP 400.</td>
+</tr>
+<tr>
+<td><code>lotlUrl</code></td>
+<td>string</td>
+<td><code>""</code> (official EU LOTL)</td>
+<td>URL of the EU List of Trusted Lists. When empty, defaults to <code>https://ec.europa.eu/tools/lotl/eu-lotl.xml</code>.</td>
+</tr>
+<tr>
+<td><code>refreshInterval</code></td>
+<td>int</td>
+<td><code>86400</code></td>
+<td>Interval in seconds between background LOTL refreshes. Clamped to <code>[3600, 604800]</code> -- a smaller value is silently raised to one hour. A failed fetch is not retried before the next interval, so this also bounds how long a verifier that started without a reachable trust list stays unusable.</td>
+</tr>
+<tr>
+<td><code>countries</code></td>
+<td>list</td>
+<td><code>[]</code> (all EU)</td>
+<td>ISO 3166-1 alpha-2 country filter. Empty list means all EU member states. Example: <code>["DE", "ES", "FR"]</code>.</td>
+</tr>
+<tr>
+<td><code>maxWorkers</code></td>
+<td>int</td>
+<td><code>5</code></td>
+<td>Number of concurrent workers for fetching national trust lists.</td>
+</tr>
+<tr>
+<td><code>fetchTimeout</code></td>
+<td>int</td>
+<td><code>30</code></td>
+<td>HTTP timeout in seconds for each individual trust list fetch.</td>
+</tr>
+<tr>
+<td><code>allowStaleTrustLists</code></td>
+<td>bool</td>
+<td><code>false</code></td>
+<td>Accept trust lists past their <code>NextUpdate</code> timestamp. Set to <code>true</code> only in environments with unreliable internet connectivity.</td>
+</tr>
+<tr>
+<td><code>statusEvaluation</code></td>
+<td>string</td>
+<td><code>"current"</code></td>
+<td>When to evaluate a trust service's status: <code>"current"</code> (at verification time) or <code>"issuance"</code> (at credential issuance time).</td>
+</tr>
+<tr>
+<td><code>revocationCheck</code></td>
+<td>string</td>
+<td><code>"soft"</code></td>
+<td>OCSP/CRL revocation checking mode. See <a href="#certificate-revocation">Certificate Revocation</a>.</td>
+</tr>
+<tr>
+<td><code>revocationTimeout</code></td>
+<td>int</td>
+<td><code>10</code></td>
+<td>HTTP timeout in seconds for OCSP/CRL requests.</td>
+</tr>
+<tr>
+<td><code>revocationCacheExpiry</code></td>
+<td>int</td>
+<td><code>3600</code></td>
+<td>Cache lifetime in seconds for revocation check results.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="production-vs-test-settings">Production vs. Test Settings<a class="headerlink" href="#production-vs-test-settings" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Production</th>
+<th>Local / Test</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>revocationCheck</code></td>
+<td><code>"soft"</code> or <code>"hard"</code></td>
+<td><code>"off"</code> -- test certs lack reachable OCSP/CRL endpoints. This does <em>not</em> make a self-signed chain trusted; that needs the mock LOTL.</td>
+</tr>
+<tr>
+<td><code>allowStaleTrustLists</code></td>
+<td><code>false</code></td>
+<td><code>true</code> (acceptable when testing offline)</td>
+</tr>
+<tr>
+<td><code>countries</code></td>
+<td>filter to relevant countries</td>
+<td><code>[]</code> (all)</td>
+</tr>
+<tr>
+<td><code>lotlUrl</code></td>
+<td>default (official EU LOTL)</td>
+<td>the in-cluster mock, see <a href="#demo-flow">Demo Flow</a></td>
+</tr>
+</tbody>
+</table>
+<p>See the <a href="https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider-eidas.yaml">k3s/provider-eidas.yaml</a> overlay
+for a complete local-deployment example.</p>
+<hr />
+<h2 id="configuration----consumer-issuer">Configuration -- Consumer (Issuer)<a class="headerlink" href="#configuration----consumer-issuer" title="Permanent link">&para;</a></h2>
+<p>The consumer runs Keycloak, which issues Verifiable Credentials signed with
+an eIDAS certificate. The <code>x5c</code> JWT header carries the full certificate
+chain. The credential's <code>iss</code> claim can use <code>did:elsi</code>, <code>did:web</code>, or an
+HTTPS identifier -- the examples below use <code>did:elsi</code>.</p>
+<h3 id="keycloak-elsi-block">Keycloak elsi Block<a class="headerlink" href="#keycloak-elsi-block" title="Permanent link">&para;</a></h3>
+<p>The <code>elsi</code> block in <code>values.yaml</code> (top-level, alongside <code>keycloak</code>) configures
+the keystore and DID used for <code>did:elsi</code> credential issuance:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">elsi</span><span class="p">:</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="c1"># Enable did:elsi credential issuance</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="c1"># Path inside the Keycloak container where the signing keystore is located.</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span><span class="c1"># Since KC 26.6.4, the java-keystore provider only reads from</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">  </span><span class="c1"># /opt/keycloak/data/&lt;realm-name&gt;/</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">  </span><span class="nt">storePath</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/opt/keycloak/data/test-realm/keystore.p12</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">  </span><span class="c1"># Keystore password</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">  </span><span class="nt">storePassword</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">password</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">  </span><span class="c1"># Alias of the signing key inside the keystore</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">  </span><span class="nt">keyAlias</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">test-keystore</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="w">  </span><span class="c1"># Password of the signing key</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="w">  </span><span class="nt">keyPassword</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">password</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="w">  </span><span class="c1"># Signing algorithm (RS256 for RSA keys)</span>
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="w">  </span><span class="nt">keyAlgorithm</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">RS256</span>
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="w">  </span><span class="c1"># The did:elsi DID — the organisationIdentifier must match the certificate</span>
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="w">  </span><span class="nt">did</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">did:elsi:VATDE-1234567</span>
+<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a><span class="w">  </span><span class="c1"># The keystore content (base64-encoded PKCS#12)</span>
+<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a><span class="w">  </span><span class="nt">keystore</span><span class="p">:</span>
+<a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a><span class="w">    </span><span class="nt">keystore.p12</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;BASE64_ENCODED_KEYSTORE&gt;</span>
+</code></pre></div>
+<p>This creates a Kubernetes Secret with the keystore and configures the
+Keycloak <a href="https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/templates/realm.yaml">realm template</a>
+to use <code>did:elsi</code> with the corresponding java-keystore key provider.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>Since Keycloak 26.6.4, the <code>java-keystore</code> realm key
+provider only reads keystores from <code>/opt/keycloak/data/&lt;realm-name&gt;/</code>.
+Both <code>storePath</code> and the container's volume mount must point inside that
+directory.</p>
+</div>
+<h3 id="jades-plugin-for-x5c-header-injection">JAdES Plugin for x5c Header Injection<a class="headerlink" href="#jades-plugin-for-x5c-header-injection" title="Permanent link">&para;</a></h3>
+<p>Standard Keycloak OID4VCI issuance does <strong>not</strong> include the <code>x5c</code>
+certificate chain header in issued JWTs. The
+<a href="https://github.com/FIWARE/keycloak-jades-vc-issuer">keycloak-jades-vc-issuer</a>
+plugin supplies it, and VCVerifier's PKIX chain validation reads it.</p>
+<p>Since <strong>1.3.0</strong> the plugin signs credentials as JAdES baseline-B
+(ETSI TS 119 182-1), not merely as a JWT with an extra header: the protected
+header carries the signing time and the certificate digest alongside <code>x5c</code>.
+It replaces Keycloak's own builder and signer for the formats it serves, and
+delegates back to them for credentials that switch JAdES off.</p>
+<table>
+<thead>
+<tr>
+<th>Format</th>
+<th>Default</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>jwt_vc_json</code></td>
+<td>JAdES</td>
+<td>Keycloak's JWT signer writes no <code>x5c</code> at all, so eIDAS validation would have nothing to check</td>
+</tr>
+<tr>
+<td><code>dc+sd-jwt</code></td>
+<td>Keycloak</td>
+<td>Keycloak already adds <code>x5c</code> to SD-JWT itself, so JAdES adds only the signing time</td>
+</tr>
+</tbody>
+</table>
+<p>Set <code>jades.enabled</code> on a credential's client scope to override the default
+per credential type:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nt">keycloak</span><span class="p">:</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="nt">realm</span><span class="p">:</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="nt">verifiableCredentials</span><span class="p">:</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">      </span><span class="nt">user-credential</span><span class="p">:</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">        </span><span class="nt">attributes</span><span class="p">:</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">          </span><span class="c1"># eIDAS validation is SD-JWT only</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">          </span><span class="nt">format</span><span class="p">:</span><span class="w"> </span><span class="s">"dc+sd-jwt"</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">          </span><span class="c1"># "false" hands this credential back to Keycloak's own signer, which writes a</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="w">          </span><span class="c1"># leaf+intermediate x5c and no signing time</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="w">          </span><span class="nt">jades.enabled</span><span class="p">:</span><span class="w"> </span><span class="s">"true"</span>
+</code></pre></div>
+<p><code>jades.enabled</code> is read raw by the plugin, not as a <code>vc.</code>-prefixed Keycloak
+credential attribute. The chart's <code>_realm.tpl</code> keeps it unprefixed for exactly
+that reason (<code>dsc.vcScopeUnprefixedAttributes</code>); writing <code>vc.jades.enabled</code>
+yourself would hide it from the plugin.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>1.3.0 requires Keycloak 26.7.x. The OID4VCI signing SPI was
+rewritten after 26.4, and the plugin's <code>provided</code> dependency set is pinned to
+what that server ships -- a second copy of a library the server already has
+breaks the Quarkus build at startup.</p>
+</div>
+<p>Add the plugin via an init container in the Keycloak configuration:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nt">keycloak</span><span class="p">:</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="nt">extraInitContainers</span><span class="p">:</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">install-jades-issuer</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">      </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">quay.io/fiware/keycloak-jades-vc-issuer:1.3.0</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">      </span><span class="nt">imagePullPolicy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">IfNotPresent</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">      </span><span class="nt">volumeMounts</span><span class="p">:</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">providers</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">          </span><span class="nt">mountPath</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/target</span>
+</code></pre></div>
+<p>See the <a href="https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-eidas.yaml">k3s/consumer-eidas.yaml</a> overlay
+for the complete init container, volume, and volume-mount configuration.</p>
+<h3 id="keystore-volume-mount">Keystore Volume Mount<a class="headerlink" href="#keystore-volume-mount" title="Permanent link">&para;</a></h3>
+<p>The eIDAS signing keystore must be mounted into the Keycloak container.
+The chart's
+<a href="https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/templates/elsi-secret.yaml">elsi-secret.yaml</a>
+template creates the Secret from the <code>elsi.keystore</code> values. It is then
+mounted via Keycloak's <code>extraVolumeMounts</code> and <code>extraVolumes</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">keycloak</span><span class="p">:</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="nt">extraVolumeMounts</span><span class="p">:</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">elsi-trust-store</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">      </span><span class="nt">mountPath</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/opt/keycloak/data/test-realm</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">  </span><span class="nt">extraVolumes</span><span class="p">:</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">elsi-trust-store</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">      </span><span class="nt">secret</span><span class="p">:</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">        </span><span class="nt">secretName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">elsi-secret</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">        </span><span class="nt">defaultMode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0755</span>
+</code></pre></div>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>The <code>mountPath</code> must match your realm name --
+<code>/opt/keycloak/data/&lt;your-realm-name&gt;/</code>. The example above uses
+<code>test-realm</code>. If your realm is named differently (e.g., <code>my-realm</code>),
+change the path to <code>/opt/keycloak/data/my-realm</code>. This is a KC 26.6.4
+restriction -- the <code>java-keystore</code> provider only reads from that path.</p>
+</div>
+<hr />
+<h2 id="preparation----generating-test-certificates">Preparation -- Generating Test Certificates<a class="headerlink" href="#preparation----generating-test-certificates" title="Permanent link">&para;</a></h2>
+<p>For local or test environments, a valid eIDAS certificate chain can be
+generated using the <a href="https://github.com/FIWARE/eIDAS">FIWARE/eIDAS tool</a>.</p>
+<h3 id="steps">Steps<a class="headerlink" href="#steps" title="Permanent link">&para;</a></h3>
+<ol>
+<li>
+<p>Create a working directory:
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>mkdir<span class="w"> </span>output
+</code></pre></div></p>
+</li>
+<li>
+<p>Create a config file:
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>cat<span class="w"> </span>&gt;<span class="w"> </span>output/config<span class="w"> </span><span class="s">&lt;&lt; 'EOF'</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="s">COUNTRY="DE"</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="s">LOCALITY="Berlin"</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="s">STATE="Berlin"</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="s"># The organisation identifier must match the did:elsi identifier</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="s">ORGANISATION_IDENTIFIER="VATDE-1234567"</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="s">ORGANISATION="Test org"</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="s">COMMON_NAME="Test"</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="s">EMAIL="test@test.org"</span>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="s"># For local testing, point to a reachable CRL endpoint.</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="s"># In the k3s local deployment, the CRL is not needed (revocationCheck: "off").</span>
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="s">CRL_URI=http://localhost:3000/crl.pem</span>
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="s">EOF</span>
+</code></pre></div></p>
+</li>
+<li>
+<p>Generate the key material:
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>docker<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span>-v<span class="w"> </span><span class="s2">"</span><span class="k">$(</span><span class="nb">pwd</span><span class="k">)</span><span class="s2">/output:/out"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">  </span>-v<span class="w"> </span><span class="s2">"</span><span class="k">$(</span><span class="nb">pwd</span><span class="k">)</span><span class="s2">/output/config:/config/config"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">  </span>quay.io/fiware/eidas:1.3.2
+</code></pre></div></p>
+</li>
+<li>
+<p>Base64-encode the outputs for use in Helm values files:
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># Signing keystore (for consumer-eidas.yaml elsi.keystore)</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>kubectl<span class="w"> </span>create<span class="w"> </span>secret<span class="w"> </span>generic<span class="w"> </span>t<span class="w"> </span>--dry-run<span class="o">=</span>client<span class="w"> </span>-o<span class="w"> </span>json<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span>--from-file<span class="w"> </span>output/keystore.p12<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">'.data."keystore.p12"'</span>
+</code></pre></div></p>
+</li>
+<li>
+<p>Extract the root CA for the mock trust list (local deployments only):
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>openssl<span class="w"> </span>x509<span class="w"> </span>-in<span class="w"> </span>output/ca/certs/cacert.pem<span class="w"> </span>-outform<span class="w"> </span>DER<span class="w"> </span><span class="p">|</span><span class="w"> </span>base64<span class="w"> </span>-w0
+</code></pre></div></p>
+</li>
+</ol>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>In production VCVerifier builds its trust store from the official
+EU Trusted Lists and needs nothing from this tool on the provider side. A
+local deployment is different: the generated CA is self-signed and therefore
+in no national trust list, so the root certificate has to be placed in a mock
+trust list -- see <a href="#mocking-the-eu-trusted-list-local-only">Mocking the EU Trusted List</a>.
+The CRL (<code>crl.pem</code>) is still not needed, since local deployments run with
+<code>revocationCheck: "off"</code>.</p>
+</div>
+<h3 id="certificate-requirements">Certificate Requirements<a class="headerlink" href="#certificate-requirements" title="Permanent link">&para;</a></h3>
+<p>For VCVerifier's PKIX validation to succeed, the leaf certificate must:</p>
+<ul>
+<li>Chain up to a CA that appears in one of the EU Trusted Lists. <code>revocationCheck</code>
+  has no bearing on this: turning it <code>"off"</code> only skips the OCSP/CRL lookup, it
+  does <strong>not</strong> make an untrusted or self-signed chain acceptable. A locally
+  generated test CA is in no national list, so a local deployment has to put its
+  root into a mock trust list --
+  see <a href="#mocking-the-eu-trusted-list-local-only">Mocking the EU Trusted List</a>.</li>
+<li>Include the full certificate chain in the <code>x5c</code> JWT header when the
+  credential is issued.</li>
+<li>When using <code>did:elsi</code>: contain the <code>organizationIdentifier</code> attribute
+  (OID 2.5.4.97) in the Subject DN, matching the DID identifier.</li>
+</ul>
+<hr />
+<h2 id="turning-validation-on-eidasconfig-per-credential-type">Turning Validation On: <code>eidasConfig</code> per Credential Type<a class="headerlink" href="#turning-validation-on-eidasconfig-per-credential-type" title="Permanent link">&para;</a></h2>
+<p>The <code>eidas</code> block from the previous section starts the trust-list fetcher and
+builds the trust store. For a <strong><code>did:elsi</code></strong> issuer that is already enough: the
+proof check validates the chain automatically. For <strong>every other issuer scheme</strong>
+it is not -- <code>EidasValidationService</code> looks its configuration up per credential
+type, and for a type that carries none it returns pass-through without touching
+the trust store.</p>
+<p>So a deployment whose issuers are <code>did:web</code> or HTTPS, with <code>eidas.enabled: true</code>
+and no <code>eidasConfig</code>, fetches the EU Trusted Lists on every refresh and never
+consults them -- and, because nothing fails, looks exactly like a working one.
+<code>eidasConfig</code> is also the only way to get per-type country and qualified-service
+filters, which the <code>did:elsi</code> path does not offer.</p>
+<p>The two settings are not interchangeable:</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Scope</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>...vcverifier.deployment.eidas.enabled</code></td>
+<td>verifier-wide</td>
+<td>Starts the trust-list fetcher and builds the trust store. <strong>Precondition for both mechanisms.</strong> With it <code>false</code>, a <code>did:elsi</code> credential is rejected with <code>eidas_trust_store_required_for_did_elsi</code>, and a per-credential <code>eidasConfig</code> is rejected at config-validation time with HTTP 400.</td>
+</tr>
+<tr>
+<td><code>eidasConfig.enabled</code></td>
+<td>one credential type</td>
+<td>Runs <code>EidasValidationService</code> on that type: required for non-<code>did:elsi</code> issuers, and the only source of per-type <code>allowedCountries</code> / <code>requireQualified</code> filters. SD-JWT only.</td>
+</tr>
+</tbody>
+</table>
+<p><code>eidasConfig</code> is set on the credential inside the verifier's service
+registration (or directly in the
+<a href="https://github.com/FIWARE/credentials-config-service">Credentials Config Service</a>):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="nt">decentralizedIam</span><span class="p">:</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span><span class="nt">vcAuthentication</span><span class="p">:</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">    </span><span class="nt">vcverifier</span><span class="p">:</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">      </span><span class="nt">registration</span><span class="p">:</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">        </span><span class="nt">services</span><span class="p">:</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">data-service</span>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="w">            </span><span class="nt">defaultOidcScope</span><span class="p">:</span><span class="w"> </span><span class="s">"default"</span>
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="w">            </span><span class="nt">oidcScopes</span><span class="p">:</span>
+<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="w">              </span><span class="s">"default"</span><span class="p p-Indicator">:</span>
+<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="w">                </span><span class="nt">credentials</span><span class="p">:</span>
+<a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a><span class="w">                  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">UserCredential</span>
+<a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a><span class="w">                    </span><span class="nt">trustedIssuersLists</span><span class="p">:</span>
+<a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a><span class="w">                      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://trusted-issuers-list:8080</span>
+<a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a><span class="w">                    </span><span class="nt">eidasConfig</span><span class="p">:</span>
+<a id="__codelineno-11-15" name="__codelineno-11-15" href="#__codelineno-11-15"></a><span class="w">                      </span><span class="c1"># validate this credential type against the trust store</span>
+<a id="__codelineno-11-16" name="__codelineno-11-16" href="#__codelineno-11-16"></a><span class="w">                      </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<a id="__codelineno-11-17" name="__codelineno-11-17" href="#__codelineno-11-17"></a><span class="w">                      </span><span class="c1"># ISO 3166-1 alpha-2; empty falls back to the global `countries`</span>
+<a id="__codelineno-11-18" name="__codelineno-11-18" href="#__codelineno-11-18"></a><span class="w">                      </span><span class="nt">allowedCountries</span><span class="p">:</span>
+<a id="__codelineno-11-19" name="__codelineno-11-19" href="#__codelineno-11-19"></a><span class="w">                        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DE</span>
+<a id="__codelineno-11-20" name="__codelineno-11-20" href="#__codelineno-11-20"></a><span class="w">                      </span><span class="c1"># defaults to true when absent: the issuing CA must be listed under a</span>
+<a id="__codelineno-11-21" name="__codelineno-11-21" href="#__codelineno-11-21"></a><span class="w">                      </span><span class="c1"># qualified service type AND the leaf must carry a QcCompliance statement</span>
+<a id="__codelineno-11-22" name="__codelineno-11-22" href="#__codelineno-11-22"></a><span class="w">                      </span><span class="nt">requireQualified</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>enabled</code></td>
+<td>bool</td>
+<td><code>false</code></td>
+<td>Validate this credential type against the EU Trusted Lists.</td>
+</tr>
+<tr>
+<td><code>allowedCountries</code></td>
+<td>list</td>
+<td><code>[]</code></td>
+<td>Restricts which national lists are consulted for this type. Empty falls back to the verifier-wide <code>countries</code>.</td>
+</tr>
+<tr>
+<td><code>requireQualified</code></td>
+<td>bool</td>
+<td><code>true</code></td>
+<td>Accept only qualified trust services (<code>CA/QC</code>, <code>NationalRootCA/QC</code>) <strong>and</strong> require the leaf certificate to declare a <code>QcCompliance</code> qcStatement. Set to <code>false</code> for a non-qualified CA.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="the-format-constraint-sd-jwt-only">The format constraint: SD-JWT only<a class="headerlink" href="#the-format-constraint-sd-jwt-only" title="Permanent link">&para;</a></h3>
+<p>eIDAS validation is implemented for SD-JWT (<code>dc+sd-jwt</code>) and for nothing else.
+A credential of any other format -- <code>jwt_vc_json</code> in particular -- that has
+<code>eidasConfig.enabled: true</code> is <strong>rejected outright</strong> with
+<code>ErrorEidasSDJWTRequired</code>. It is not silently skipped and it is not accepted.</p>
+<p>So an eIDAS deployment issues its credentials as <code>dc+sd-jwt</code>, and the DCQL query
+that asks for them matches on <code>meta.vct_values</code> (a flat array) rather than the
+<code>meta.type_values</code> (array of arrays) that <code>jwt_vc_json</code> uses.</p>
+<h3 id="x5c-and-the-trust-anchor">x5c and the trust anchor<a class="headerlink" href="#x5c-and-the-trust-anchor" title="Permanent link">&para;</a></h3>
+<p>Two signers produce a different <code>x5c</code> for SD-JWT, and both validate:</p>
+<table>
+<thead>
+<tr>
+<th>Signer</th>
+<th><code>x5c</code> contents</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Keycloak's own <code>SdJwtCredentialSigner</code></td>
+<td>leaf + intermediate</td>
+<td>HAIP-6.1.1 requires the trust anchor <strong>not</strong> to be in <code>x5c</code>; Keycloak strips the trailing self-signed certificate.</td>
+</tr>
+<tr>
+<td><code>keycloak-jades-vc-issuer</code> with <code>jades.enabled: "true"</code></td>
+<td>leaf + intermediate + root</td>
+<td>Writes the realm key's full chain, and adds the JAdES signing time.</td>
+</tr>
+</tbody>
+</table>
+<p>PKIX chain building takes the root from the trust store either way, so the
+shorter chain is not a problem. The local overlay forces JAdES because the
+signing time is part of what makes the signature an eIDAS advanced electronic
+signature.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code>jades.enabled</code> is <strong>not</strong> a <code>vc.</code>-prefixed Keycloak credential
+attribute -- the plugin reads it raw. The chart keeps it unprefixed for that
+reason; see <code>dsc.vcScopeUnprefixedAttributes</code> in <code>_realm.tpl</code>.</p>
+</div>
+<hr />
+<h2 id="certificate-revocation">Certificate Revocation<a class="headerlink" href="#certificate-revocation" title="Permanent link">&para;</a></h2>
+<p>The <code>revocationCheck</code> setting controls how VCVerifier handles OCSP and CRL
+revocation checking for certificates in the <code>x5c</code> chain:</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>"off"</code></td>
+<td>No revocation checking. Use only for local testing with self-signed certificates that lack OCSP/CRL endpoints.</td>
+</tr>
+<tr>
+<td><code>"soft"</code></td>
+<td>Best-effort revocation checking. If OCSP/CRL endpoints are unreachable or time out, the certificate is <strong>accepted</strong>. This is the default and is recommended for production.</td>
+</tr>
+<tr>
+<td><code>"hard"</code></td>
+<td>Fail-closed revocation checking. If OCSP/CRL endpoints are unreachable or time out, the certificate is <strong>rejected</strong>. Use when strict compliance is required and OCSP/CRL infrastructure is guaranteed to be available.</td>
+</tr>
+</tbody>
+</table>
+<p>Related settings:</p>
+<ul>
+<li><code>revocationTimeout</code> -- HTTP timeout in seconds for OCSP/CRL requests
+  (default: <code>10</code>).</li>
+<li><code>revocationCacheExpiry</code> -- How long (in seconds) to cache a revocation
+  check result before re-checking (default: <code>3600</code>).</li>
+</ul>
+<hr />
+<h2 id="trust-list-freshness">Trust List Freshness<a class="headerlink" href="#trust-list-freshness" title="Permanent link">&para;</a></h2>
+<p>VCVerifier fetches the EU List of Trusted Lists (LOTL) at startup and
+refreshes it periodically. The following settings control this behavior:</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>refreshInterval</code></td>
+<td><code>86400</code> (24 hours)</td>
+<td>How often (in seconds) to re-fetch the LOTL and rebuild the trust store. Values below <code>3600</code> are clamped to one hour.</td>
+</tr>
+<tr>
+<td><code>allowStaleTrustLists</code></td>
+<td><code>false</code></td>
+<td>Whether to accept trust lists whose <code>NextUpdate</code> timestamp is in the past. When <code>false</code>, an expired trust list causes the affected certificates to be untrusted until a fresh list is obtained.</td>
+</tr>
+<tr>
+<td><code>lotlUrl</code></td>
+<td><code>""</code> (official EU LOTL)</td>
+<td>Override the LOTL URL. Useful for testing with a mock trust list.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Operational considerations:</strong></p>
+<ul>
+<li>The initial trust store build happens during VCVerifier startup. If the
+  LOTL or national lists are unreachable, startup will succeed but the
+  trust store will be empty, causing all eIDAS-validated credentials to be
+  rejected.</li>
+<li>The <code>countries</code> filter (e.g., <code>["DE", "ES"]</code>) reduces startup time and
+  memory usage by only fetching trust lists for the specified countries.</li>
+<li><code>maxWorkers</code> controls how many national trust lists are fetched in
+  parallel (default: <code>5</code>). Increase for faster startup in production;
+  decrease if the network has strict rate limits.</li>
+</ul>
+<hr />
+<h2 id="local-deployment">Local Deployment<a class="headerlink" href="#local-deployment" title="Permanent link">&para;</a></h2>
+<p>Once the provider and consumer are configured (see sections above), deploy
+the eIDAS-enabled data space locally:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>mvn<span class="w"> </span>clean<span class="w"> </span>deploy<span class="w"> </span>-Plocal,eidas
+</code></pre></div>
+<p>This uses the Maven <code>eidas</code> profile, which applies the
+<a href="https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider-eidas.yaml">k3s/provider-eidas.yaml</a> and
+<a href="https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-eidas.yaml">k3s/consumer-eidas.yaml</a> overlay files on
+top of the base configuration.</p>
+<p>All commands below go through the squid proxy the local deployment brings
+up (<code>-x localhost:8888</code>), so that in-cluster and host-side name resolution
+match. <code>-k</code> is needed because the local certificates are issued by the
+cluster's self-signed CA.</p>
+<hr />
+<h2 id="mocking-the-eu-trusted-list-local-only">Mocking the EU Trusted List (local only)<a class="headerlink" href="#mocking-the-eu-trusted-list-local-only" title="Permanent link">&para;</a></h2>
+<p>PKIX validation only accepts a certificate chain that terminates in a CA the
+trust store knows. The trust store is built from the EU List of Trusted Lists,
+and a locally generated test CA is -- by definition -- not in it. Against the
+official LOTL, every locally issued credential is therefore rejected, no matter
+how the deployment is configured.</p>
+<p>A local demo consequently needs a mock LOTL that declares the test CA a granted
+qualified CA. The eIDAS overlay ships one:</p>
+<table>
+<thead>
+<tr>
+<th>Document</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>lotl.xml</code></td>
+<td>List of Trusted Lists, pointing at a single national list</td>
+</tr>
+<tr>
+<td><code>tl-de.xml</code></td>
+<td>National list (territory <code>DE</code>) carrying the test CA as <code>CA/QC</code>, status <code>granted</code></td>
+</tr>
+</tbody>
+</table>
+<p>Both live as ConfigMap entries in the <code>extraManifests</code> block at the end of
+<a href="https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider-eidas.yaml">k3s/provider-eidas.yaml</a> -- that is the only
+copy, so edit them there. A small static web server defined in the same block
+serves them in-cluster, and the verifier is pointed at it:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="nt">decentralizedIam</span><span class="p">:</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">  </span><span class="nt">vcAuthentication</span><span class="p">:</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="w">    </span><span class="nt">vcverifier</span><span class="p">:</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="w">      </span><span class="nt">deployment</span><span class="p">:</span>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="w">        </span><span class="nt">eidas</span><span class="p">:</span>
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="w">          </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="w">          </span><span class="nt">lotlUrl</span><span class="p">:</span><span class="w"> </span><span class="s">"http://eidas-trust-list-mock:3000/lotl.xml"</span>
+</code></pre></div>
+<p>After regenerating the test material, the certificate in <code>tl-de.xml</code> has to be
+replaced with the new root CA:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>openssl<span class="w"> </span>x509<span class="w"> </span>-in<span class="w"> </span>output/ca/certs/cacert.pem<span class="w"> </span>-outform<span class="w"> </span>DER<span class="w"> </span><span class="p">|</span><span class="w"> </span>base64<span class="w"> </span>-w0
+</code></pre></div>
+<p>VCVerifier does not verify the XMLDSig signature on trust lists -- a documented
+limitation of its <code>eidas</code> package -- so the mock is served unsigned.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p><strong>Never point a production deployment at a mock trust list.</strong> It declares an
+arbitrary CA qualified, which removes the entire assurance that eIDAS
+validation exists to provide. Production leaves <code>lotlUrl</code> unset so the
+official EU LOTL is used.</p>
+</div>
+<hr />
+<h2 id="demo-flow">Demo Flow<a class="headerlink" href="#demo-flow" title="Permanent link">&para;</a></h2>
+<p>This walks an eIDAS credential end to end: the consumer's Keycloak issues a
+credential signed with an eIDAS certificate, and the provider's VCVerifier
+accepts it after validating the <code>x5c</code> chain. It is the standard OID4VP flow
+from <a href="../local-deployment/LOCAL/#demo-interactions">LOCAL.md</a> -- the
+eIDAS-specific parts are steps 3 and 4.</p>
+<h3 id="1-confirm-the-verifier-started">1. Confirm the verifier started<a class="headerlink" href="#1-confirm-the-verifier-started" title="Permanent link">&para;</a></h3>
+<p>VCVerifier builds its trust store at startup. If it cannot start, nothing
+downstream works:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>kubectl<span class="w"> </span>logs<span class="w"> </span>-n<span class="w"> </span>provider<span class="w"> </span>deployment/verifier<span class="w"> </span><span class="p">|</span><span class="w"> </span>tail<span class="w"> </span>-20
+</code></pre></div>
+<p>A healthy verifier reports what it loaded into the trust store:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>TrustListFetcher: starting initial fetch from http://eidas-trust-list-mock:3000/lotl.xml
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>TrustListFetcher: found 1 national TLs (1 after country filter)
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>TrustListFetcher: refresh complete, 1 countries loaded, 1 total services
+</code></pre></div>
+<p><code>1 total services</code> is the mock's test CA. If it says <code>0 total services</code>, the
+trust store is empty and every credential will be rejected in step 6 -- the
+verifier starts perfectly happily either way, which is why this is worth
+checking first. These lines are logged at <code>INFO</code>; at the default <code>WARN</code> the
+startup is silent.</p>
+<p>Two startup failures are also worth recognising:</p>
+<table>
+<thead>
+<tr>
+<th>Log message</th>
+<th>Cause</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Failed to initialize verifier: no_did_configured</code></td>
+<td><code>verifier.did</code> is empty or unresolved</td>
+</tr>
+<tr>
+<td><code>Failed to initialize verifier: request_mode_not_in_supported_modes</code></td>
+<td><code>requestMode</code> is not one of <code>supportedModes</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="2-confirm-the-protected-endpoint-rejects-anonymous-access">2. Confirm the protected endpoint rejects anonymous access<a class="headerlink" href="#2-confirm-the-protected-endpoint-rejects-anonymous-access" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>curl<span class="w"> </span>-k<span class="w"> </span>-x<span class="w"> </span>localhost:8888<span class="w"> </span>-s<span class="w"> </span>-o<span class="w"> </span>/dev/null<span class="w"> </span>-w<span class="w"> </span><span class="s1">'%{http_code}\n'</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="w">  </span><span class="s1">'https://mp-data-service.127.0.0.1.nip.io/ngsi-ld/v1/entities/urn:ngsi-ld:EnergyReport:fms-1'</span>
+</code></pre></div>
+<p>Expected: <code>401</code>. A <code>404</code> with <code>{"error_msg":"404 Route Not Found"}</code> means
+APISIX loaded no routes; a plain <code>404 page not found</code> comes from Traefik and
+means the ingress has no HTTPS router.</p>
+<p>The endpoint advertises how to authenticate:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">TOKEN_ENDPOINT</span><span class="o">=</span><span class="k">$(</span>curl<span class="w"> </span>-k<span class="w"> </span>-x<span class="w"> </span>localhost:8888<span class="w"> </span>-s<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="w">  </span><span class="s1">'https://mp-data-service.127.0.0.1.nip.io/.well-known/openid-configuration'</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a><span class="w">  </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">'.token_endpoint'</span><span class="k">)</span><span class="p">;</span><span class="w"> </span><span class="nb">echo</span><span class="w"> </span><span class="si">${</span><span class="nv">TOKEN_ENDPOINT</span><span class="si">}</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>https://provider-verifier.127.0.0.1.nip.io:8080/services/data-service/token
+</code></pre></div>
+<h3 id="3-issue-a-credential-from-the-consumer">3. Issue a credential from the consumer<a class="headerlink" href="#3-issue-a-credential-from-the-consumer" title="Permanent link">&para;</a></h3>
+<p><code>get_credential.sh</code> runs the full OID4VCI pre-authorized-code flow: it logs
+the user in, creates a credential offer, redeems the pre-authorized code and
+requests the credential.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">ELSI_CREDENTIAL</span><span class="o">=</span><span class="k">$(</span>./doc/scripts/get_credential.sh<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="w">  </span>https://keycloak-consumer.127.0.0.1.nip.io<span class="w"> </span>user-credential<span class="w"> </span>test-user<span class="k">)</span>
+<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a><span class="nb">echo</span><span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">ELSI_CREDENTIAL</span><span class="si">}</span><span class="s2">"</span>
+</code></pre></div>
+<p>The third argument is the user the credential is issued to; it is required.
+<code>user-credential</code>, <code>operator-credential</code> and <code>verifiable-credential</code> are the
+three configurations the eIDAS overlay declares.</p>
+<blockquote>
+<p>If this answers <code>400 invalid_credential_offer_request</code> with
+<em>"User 'test-user' does not have verifiable credential 'user-credential'"</em>,
+the realm was imported without
+<code>keycloak.realm.wallets.issueCredentialsToUsers: true</code>. Keycloak does not
+re-import an existing realm, so the realm has to be recreated after adding
+it.</p>
+</blockquote>
+<h3 id="4-verify-the-eidas-properties-of-the-credential">4. Verify the eIDAS properties of the credential<a class="headerlink" href="#4-verify-the-eidas-properties-of-the-credential" title="Permanent link">&para;</a></h3>
+<p>This is what distinguishes the eIDAS flow from the standard one. Decode the
+JWT header and check that the certificate chain travelled with the
+credential:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="nb">echo</span><span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">ELSI_CREDENTIAL</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>cut<span class="w"> </span>-d<span class="w"> </span><span class="s1">'.'</span><span class="w"> </span>-f1<span class="w"> </span><span class="p">|</span><span class="w"> </span>tr<span class="w"> </span><span class="s1">'_-'</span><span class="w"> </span><span class="s1">'/+'</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="w">  </span><span class="p">|</span><span class="w"> </span>awk<span class="w"> </span><span class="s1">'{print $0 "=="}'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>base64<span class="w"> </span>-d<span class="w"> </span><span class="m">2</span>&gt;/dev/null<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="w">  </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">'{alg, typ, iat, x5c_chain_length: (.x5c | length)}'</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="p">{</span>
+<a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="w">  </span><span class="nt">"alg"</span><span class="p">:</span><span class="w"> </span><span class="s2">"RS256"</span><span class="p">,</span>
+<a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a><span class="w">  </span><span class="nt">"typ"</span><span class="p">:</span><span class="w"> </span><span class="s2">"JWT"</span><span class="p">,</span>
+<a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a><span class="w">  </span><span class="nt">"iat"</span><span class="p">:</span><span class="w"> </span><span class="mi">1790171496</span><span class="p">,</span>
+<a id="__codelineno-22-5" name="__codelineno-22-5" href="#__codelineno-22-5"></a><span class="w">  </span><span class="nt">"x5c_chain_length"</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span>
+<a id="__codelineno-22-6" name="__codelineno-22-6" href="#__codelineno-22-6"></a><span class="p">}</span>
+</code></pre></div>
+<p><code>x5c</code> carries the leaf, intermediate and root certificates that VCVerifier
+validates against the trust list. If <code>x5c</code> is absent, the JAdES plugin is not
+installed on the consumer's Keycloak -- see
+<a href="#jades-plugin-for-x5c-header-injection">JAdES Plugin for x5c Header Injection</a>.</p>
+<p><code>iat</code> is the signing time, which is what distinguishes a JAdES baseline-B
+signature from a plain JWS -- together with <code>x5c</code> and the <code>x5t#o</code> certificate
+digest. Older JAdES carried the signing time as <code>sigT</code> and listed it in <code>crit</code>;
+since ETSI TS 119 182-1 v1.2 it is the registered <code>iat</code> claim and needs no
+<code>crit</code> entry, so nothing in the header forces a verifier to understand JAdES.
+<code>alg</code> follows <code>elsi.keyAlgorithm</code>, and <code>typ</code> comes from the credential's
+<code>credential_build_config.token_jws_type</code>.</p>
+<p>To check the chain against the trust list without involving the verifier,
+extract the three certificates and the trust list's CA, then verify:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a><span class="k">for</span><span class="w"> </span>i<span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="m">0</span><span class="w"> </span><span class="m">1</span><span class="w"> </span><span class="m">2</span><span class="p">;</span><span class="w"> </span><span class="k">do</span>
+<a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a><span class="w">  </span><span class="nb">echo</span><span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">ELSI_CREDENTIAL</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>cut<span class="w"> </span>-d<span class="w"> </span><span class="s1">'.'</span><span class="w"> </span>-f1<span class="w"> </span><span class="p">|</span><span class="w"> </span>tr<span class="w"> </span><span class="s1">'_-'</span><span class="w"> </span><span class="s1">'/+'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>awk<span class="w"> </span><span class="s1">'{print $0 "=="}'</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a><span class="w">    </span><span class="p">|</span><span class="w"> </span>base64<span class="w"> </span>-d<span class="w"> </span><span class="m">2</span>&gt;/dev/null<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s2">".x5c[</span><span class="nv">$i</span><span class="s2">]"</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>base64<span class="w"> </span>-d<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-23-4" name="__codelineno-23-4" href="#__codelineno-23-4"></a><span class="w">    </span><span class="p">|</span><span class="w"> </span>openssl<span class="w"> </span>x509<span class="w"> </span>-inform<span class="w"> </span>DER<span class="w"> </span>-out<span class="w"> </span>chain<span class="nv">$i</span>.pem
+<a id="__codelineno-23-5" name="__codelineno-23-5" href="#__codelineno-23-5"></a><span class="k">done</span>
+<a id="__codelineno-23-6" name="__codelineno-23-6" href="#__codelineno-23-6"></a>
+<a id="__codelineno-23-7" name="__codelineno-23-7" href="#__codelineno-23-7"></a>sed<span class="w"> </span>-n<span class="w"> </span><span class="s1">'/&lt;X509Certificate&gt;/,/&lt;\/X509Certificate&gt;/p'</span><span class="w"> </span>k3s/provider-eidas.yaml<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-23-8" name="__codelineno-23-8" href="#__codelineno-23-8"></a><span class="w">  </span><span class="p">|</span><span class="w"> </span>sed<span class="w"> </span><span class="s1">'1d;$d'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>tr<span class="w"> </span>-d<span class="w"> </span><span class="s1">' \n'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>base64<span class="w"> </span>-d<span class="w"> </span><span class="p">|</span><span class="w"> </span>openssl<span class="w"> </span>x509<span class="w"> </span>-inform<span class="w"> </span>DER<span class="w"> </span>-out<span class="w"> </span>tl-ca.pem
+<a id="__codelineno-23-9" name="__codelineno-23-9" href="#__codelineno-23-9"></a>
+<a id="__codelineno-23-10" name="__codelineno-23-10" href="#__codelineno-23-10"></a>openssl<span class="w"> </span>verify<span class="w"> </span>-CAfile<span class="w"> </span>tl-ca.pem<span class="w"> </span>-untrusted<span class="w"> </span>chain1.pem<span class="w"> </span>chain0.pem
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a>chain0.pem: OK
+</code></pre></div>
+<p>A simpler equivalent: the root in the credential's <code>x5c[-1]</code> must be
+byte-identical to the certificate in
+the <code>tl-de.xml</code> entry of <a href="https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider-eidas.yaml">k3s/provider-eidas.yaml</a>. If they differ,
+the trust list was built from a different run of the certificate tool than the
+keystore in <code>k3s/consumer-eidas.yaml</code>, and the verifier rejects the credential
+with <code>certificate does not chain to any trusted service</code>.</p>
+<p>Then check that the issuer is the <code>did:elsi</code> DID:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a>./doc/scripts/get-payload-from-jwt.sh<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">ELSI_CREDENTIAL</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">'{iss, vct}'</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a><span class="p">{</span>
+<a id="__codelineno-26-2" name="__codelineno-26-2" href="#__codelineno-26-2"></a><span class="w">  </span><span class="nt">"iss"</span><span class="p">:</span><span class="w"> </span><span class="s2">"did:elsi:VATDE-1234567"</span><span class="p">,</span>
+<a id="__codelineno-26-3" name="__codelineno-26-3" href="#__codelineno-26-3"></a><span class="w">  </span><span class="nt">"vct"</span><span class="p">:</span><span class="w"> </span><span class="s2">"UserCredential"</span>
+<a id="__codelineno-26-4" name="__codelineno-26-4" href="#__codelineno-26-4"></a><span class="p">}</span>
+</code></pre></div>
+<p>SD-JWT carries the credential type in the flat <code>vct</code> claim; the <code>vc.type</code> array
+is the <code>jwt_vc_json</code> shape, which eIDAS validation does not accept.</p>
+<p>The identifier after <code>did:elsi:</code> must equal the <code>organizationIdentifier</code>
+(OID 2.5.4.97) in the leaf certificate's Subject DN -- that is the match
+VCVerifier performs in step 3 of the
+<a href="#validation-flow">Validation Flow</a>. To read it from the certificate:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a><span class="nb">echo</span><span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">ELSI_CREDENTIAL</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>cut<span class="w"> </span>-d<span class="w"> </span><span class="s1">'.'</span><span class="w"> </span>-f1<span class="w"> </span><span class="p">|</span><span class="w"> </span>tr<span class="w"> </span><span class="s1">'_-'</span><span class="w"> </span><span class="s1">'/+'</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-27-2" name="__codelineno-27-2" href="#__codelineno-27-2"></a><span class="w">  </span><span class="p">|</span><span class="w"> </span>awk<span class="w"> </span><span class="s1">'{print $0 "=="}'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>base64<span class="w"> </span>-d<span class="w"> </span><span class="m">2</span>&gt;/dev/null<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">'.x5c[0]'</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-27-3" name="__codelineno-27-3" href="#__codelineno-27-3"></a><span class="w">  </span><span class="p">|</span><span class="w"> </span>base64<span class="w"> </span>-d<span class="w"> </span><span class="p">|</span><span class="w"> </span>openssl<span class="w"> </span>x509<span class="w"> </span>-inform<span class="w"> </span>DER<span class="w"> </span>-noout<span class="w"> </span>-subject
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-28-1" name="__codelineno-28-1" href="#__codelineno-28-1"></a>subject=C=DE, ST=Berlin, L=Berlin, O=Test org, CN=Test, .../organizationIdentifier=VATDE-1234567
+</code></pre></div>
+<h3 id="5-create-a-holder-did">5. Create a holder DID<a class="headerlink" href="#5-create-a-holder-did" title="Permanent link">&para;</a></h3>
+<p>The credential is presented in a Verifiable Presentation signed by the
+holder, so a holder key is needed. This is the consumer-side wallet identity
+and has nothing to do with the eIDAS certificate:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a>mkdir<span class="w"> </span>-p<span class="w"> </span>cert
+<a id="__codelineno-29-2" name="__codelineno-29-2" href="#__codelineno-29-2"></a>chmod<span class="w"> </span>o+rw<span class="w"> </span>cert
+<a id="__codelineno-29-3" name="__codelineno-29-3" href="#__codelineno-29-3"></a>docker<span class="w"> </span>run<span class="w"> </span>-v<span class="w"> </span><span class="k">$(</span><span class="nb">pwd</span><span class="k">)</span>/cert:/cert<span class="w"> </span>quay.io/wi_stefan/did-helper:0.1.1
+<a id="__codelineno-29-4" name="__codelineno-29-4" href="#__codelineno-29-4"></a><span class="c1"># unsecure, only do that for demo</span>
+<a id="__codelineno-29-5" name="__codelineno-29-5" href="#__codelineno-29-5"></a>sudo<span class="w"> </span>chmod<span class="w"> </span>-R<span class="w"> </span>o+rw<span class="w"> </span>cert/private-key.pem
+<a id="__codelineno-29-6" name="__codelineno-29-6" href="#__codelineno-29-6"></a><span class="nb">export</span><span class="w"> </span><span class="nv">HOLDER_DID</span><span class="o">=</span><span class="k">$(</span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">'.id'</span><span class="w"> </span>cert/did.json<span class="k">)</span><span class="p">;</span><span class="w"> </span><span class="nb">echo</span><span class="w"> </span><span class="si">${</span><span class="nv">HOLDER_DID</span><span class="si">}</span>
+</code></pre></div>
+<h3 id="6-exchange-the-credential-for-an-access-token">6. Exchange the credential for an access token<a class="headerlink" href="#6-exchange-the-credential-for-an-access-token" title="Permanent link">&para;</a></h3>
+<p><code>get_access_token_oid4vp.sh</code> wraps the credential in a Verifiable
+Presentation, signs it with the holder key and posts it to the verifier as a
+<code>vp_token</code> grant. It is here that VCVerifier performs the eIDAS validation:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">ACCESS_TOKEN</span><span class="o">=</span><span class="k">$(</span>./doc/scripts/get_access_token_oid4vp.sh<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-30-2" name="__codelineno-30-2" href="#__codelineno-30-2"></a><span class="w">  </span>https://mp-data-service.127.0.0.1.nip.io<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">ELSI_CREDENTIAL</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span>default<span class="k">)</span>
+<a id="__codelineno-30-3" name="__codelineno-30-3" href="#__codelineno-30-3"></a><span class="nb">echo</span><span class="w"> </span><span class="si">${</span><span class="nv">ACCESS_TOKEN</span><span class="si">}</span>
+</code></pre></div>
+<p>If the token comes back <code>null</code>, the verifier rejected the credential. Its log
+says why:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a>kubectl<span class="w"> </span>logs<span class="w"> </span>-n<span class="w"> </span>provider<span class="w"> </span>deployment/verifier<span class="w"> </span>--tail<span class="o">=</span><span class="m">50</span>
+</code></pre></div>
+<p>See <a href="#troubleshooting">Troubleshooting</a> for the common causes -- with test
+certificates the usual one is that the issuing CA is not in the EU Trusted
+Lists.</p>
+<h3 id="7-access-the-protected-data">7. Access the protected data<a class="headerlink" href="#7-access-the-protected-data" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-32-1" name="__codelineno-32-1" href="#__codelineno-32-1"></a>curl<span class="w"> </span>-k<span class="w"> </span>-x<span class="w"> </span>localhost:8888<span class="w"> </span>-s<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-32-2" name="__codelineno-32-2" href="#__codelineno-32-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">"Authorization: Bearer </span><span class="si">${</span><span class="nv">ACCESS_TOKEN</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-32-3" name="__codelineno-32-3" href="#__codelineno-32-3"></a><span class="w">  </span><span class="s1">'https://mp-data-service.127.0.0.1.nip.io/ngsi-ld/v1/entities/urn:ngsi-ld:EnergyReport:fms-1'</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-32-4" name="__codelineno-32-4" href="#__codelineno-32-4"></a><span class="w">  </span><span class="p">|</span><span class="w"> </span>jq
+</code></pre></div>
+<p>The same request returned <code>401</code> in step 2, so a <code>200</code> here means the whole
+chain held: the credential was signed with an eIDAS certificate, its <code>x5c</code>
+chain validated against the trust store, the <code>organizationIdentifier</code>
+matched the <code>did:elsi</code> issuer, and the provider's policy granted access.</p>
+<blockquote>
+<p>The entity and the access policy have to exist for this step. Creating them
+is not eIDAS-specific -- see
+<a href="../local-deployment/LOCAL/#the-data-provider">The Data Provider</a> in
+<code>LOCAL.md</code>.</p>
+</blockquote>
+<h3 id="8-confirm-that-validation-actually-bites">8. Confirm that validation actually bites<a class="headerlink" href="#8-confirm-that-validation-actually-bites" title="Permanent link">&para;</a></h3>
+<p>A demo that only shows the happy path proves little -- and a credential refused
+by the trusted-issuers list proves nothing about the trust list, because that is
+a different check entirely.</p>
+<p>The eIDAS overlay therefore registers a second scope,
+<code>eidas-unlisted-country</code>, that differs from <code>default</code> in exactly one field:
+its <code>eidasConfig.allowedCountries</code> is <code>["FR"]</code>, and the mock national list is
+territory <code>DE</code>. Present the very same credential against it:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-33-1" name="__codelineno-33-1" href="#__codelineno-33-1"></a>./doc/scripts/get_access_token_oid4vp.sh<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-33-2" name="__codelineno-33-2" href="#__codelineno-33-2"></a><span class="w">  </span>https://mp-data-service.127.0.0.1.nip.io<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">ELSI_CREDENTIAL</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span>eidas-unlisted-country
+</code></pre></div>
+<p>It must come back empty while step 6 succeeded. Same credential, same issuer,
+same policy, same trusted-issuers list -- the only thing that changed is which
+national trust list the verifier was allowed to look in. That is the one
+observation that distinguishes "the chain was validated" from "the check was
+skipped", and it is what <code>it/src/test/resources/it/eidas.feature</code> asserts.</p>
+<p>The verifier's log names the reason:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-34-1" name="__codelineno-34-1" href="#__codelineno-34-1"></a>EidasValidationService: issuer certificate does not chain to any trusted service
+</code></pre></div>
+<hr />
+<h2 id="migration-from-dss-based-approach">Migration from DSS-based Approach<a class="headerlink" href="#migration-from-dss-based-approach" title="Permanent link">&para;</a></h2>
+<p>If your deployment previously used the external <code>dss-validation-service</code> for
+eIDAS certificate validation (chart versions &lt; 10.10.0), follow these steps to
+migrate to VCVerifier-native trust list validation.</p>
+<h3 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>decentralized-iam &gt;= 2.1.25</strong> (VCVerifier &gt;= 6.23.1) — included in chart
+  version 10.10.0 and later. The feature itself exists from 2.1.23 /
+  VCVerifier 6.22.0, but <code>lotlUrl</code> is only settable from 2.1.25.</li>
+<li>Familiarity with your existing <code>dss:</code> configuration block and any custom
+  overlays that deploy the DSS sidecar.</li>
+</ul>
+<h3 id="migration-steps">Migration Steps<a class="headerlink" href="#migration-steps" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Enable VCVerifier-native eIDAS validation.</strong> Add the <code>eidas</code> block to
+   your values overlay:</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-35-1" name="__codelineno-35-1" href="#__codelineno-35-1"></a><span class="nt">decentralizedIam</span><span class="p">:</span>
+<a id="__codelineno-35-2" name="__codelineno-35-2" href="#__codelineno-35-2"></a><span class="w">  </span><span class="nt">vcAuthentication</span><span class="p">:</span>
+<a id="__codelineno-35-3" name="__codelineno-35-3" href="#__codelineno-35-3"></a><span class="w">    </span><span class="nt">vcverifier</span><span class="p">:</span>
+<a id="__codelineno-35-4" name="__codelineno-35-4" href="#__codelineno-35-4"></a><span class="w">      </span><span class="nt">deployment</span><span class="p">:</span>
+<a id="__codelineno-35-5" name="__codelineno-35-5" href="#__codelineno-35-5"></a><span class="w">        </span><span class="nt">eidas</span><span class="p">:</span>
+<a id="__codelineno-35-6" name="__codelineno-35-6" href="#__codelineno-35-6"></a><span class="w">          </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</code></pre></div>
+<p>See <a href="#enabling-eidas-validation">Enabling eIDAS Validation</a> for the full
+   minimal overlay and <a href="#configuration-reference">Configuration Reference</a>
+   for all available settings.</p>
+<ol>
+<li>
+<p><strong>Remove or leave the <code>dss:</code> block.</strong> The
+   <code>decentralizedIam.vcAuthentication.dss</code> block is deprecated. When
+   <code>eidas.enabled</code> is <code>true</code>, VCVerifier ignores the DSS configuration
+   entirely. You may remove the block now or leave it for a transitional
+   period — it has no effect.</p>
+</li>
+<li>
+<p><strong>Remove DSS infrastructure from overlays.</strong> Delete the following from
+   your custom values files and deployment overlays:</p>
+</li>
+<li><code>dss-validation-service</code> Deployment / container definitions</li>
+<li>DSS-related Secrets and ConfigMaps (keystores, CRL stores)</li>
+<li>CRL-update sidecar or CronJob (if present)</li>
+<li>
+<p>Any <code>Service</code> or <code>Ingress</code> exposing the DSS endpoint</p>
+</li>
+<li>
+<p><strong>Remove <code>verifier.elsi.validationEndpoint</code>.</strong> This setting previously
+   pointed VCVerifier at the external DSS service. It is no longer needed —
+   validation is built-in when <code>eidas.enabled</code> is <code>true</code>.</p>
+</li>
+<li>
+<p><strong>Keep the <code>keycloak-jades-vc-issuer</code> init container (consumer side).</strong>
+   The JAdES plugin is still required on the consumer's Keycloak to inject
+   the <code>x5c</code> certificate chain header into issued credentials. See
+   <a href="#jades-plugin-for-x5c-header-injection">JAdES Plugin for x5c Header Injection</a>.</p>
+</li>
+<li>
+<p><strong>Tune environment-specific settings.</strong> Adjust these values for your
+   deployment:</p>
+</li>
+<li><code>revocationCheck</code> — <code>"soft"</code> for production, <code>"off"</code> for local testing
+     (see <a href="#certificate-revocation">Certificate Revocation</a>)</li>
+<li><code>refreshInterval</code> — how often to re-fetch the LOTL (default: 24 hours)</li>
+<li><code>countries</code> — filter to only the EU member states you need</li>
+</ol>
+<h3 id="before--after-comparison">Before / After Comparison<a class="headerlink" href="#before--after-comparison" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Before (&lt; 10.10.0)</th>
+<th>After (&gt;= 10.10.0)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>decentralizedIam.vcAuthentication.dss</code> block with DSS endpoint URL</td>
+<td><code>decentralizedIam.vcAuthentication.vcverifier.deployment.eidas</code> block</td>
+</tr>
+<tr>
+<td>External <code>dss-validation-service</code> Deployment + Service</td>
+<td>No external service — VCVerifier validates natively</td>
+</tr>
+<tr>
+<td>CRL-update sidecar or CronJob for revocation data</td>
+<td>Built-in OCSP/CRL checks via <code>revocationCheck</code> setting</td>
+</tr>
+<tr>
+<td><code>verifier.elsi.validationEndpoint</code> pointing to DSS</td>
+<td>Removed — automatic when <code>eidas.enabled: true</code></td>
+</tr>
+<tr>
+<td><code>keycloak-jades-vc-issuer</code> init container</td>
+<td>Retained — still needed for <code>x5c</code> header injection</td>
+</tr>
+</tbody>
+</table>
+<h3 id="rollback">Rollback<a class="headerlink" href="#rollback" title="Permanent link">&para;</a></h3>
+<p>Reverting to the DSS-based approach is <strong>not</strong> a values-only change.
+<code>verifier.elsi.validationEndpoint</code> no longer exists anywhere in the bundled
+charts -- vcverifier 4.13.0 dropped the key:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-36-1" name="__codelineno-36-1" href="#__codelineno-36-1"></a><span class="gp">$ </span>grep<span class="w"> </span>-rn<span class="w"> </span><span class="s2">"validationEndpoint"</span><span class="w"> </span>charts/
+<a id="__codelineno-36-2" name="__codelineno-36-2" href="#__codelineno-36-2"></a><span class="gp gp-VirtualEnv">(nothing)</span>
+</code></pre></div>
+<p>So a rollback means pinning the whole <code>decentralized-iam</code> dependency back to a
+version that still ships it (&lt; 2.1.23), not just restoring the <code>dss:</code> block.
+Concretely:</p>
+<ol>
+<li>Pin <code>decentralized-iam</code> to <code>2.1.22</code> in
+   <code>charts/data-space-connector/Chart.yaml</code> and re-run
+   <code>helm dependency update</code>.</li>
+<li>Set <code>eidas.enabled: false</code> (or remove the <code>eidas:</code> block).</li>
+<li>Restore the <code>dss:</code> block and <code>verifier.elsi.validationEndpoint</code>.</li>
+<li>Re-deploy the <code>dss-validation-service</code> and CRL infrastructure.</li>
+<li>Switch the credentials back to <code>jwt_vc_json</code> and remove <code>eidasConfig</code> --
+   the DSS-based path did not use either.</li>
+</ol>
+<hr />
+<h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
+<h3 id="common-error-scenarios">Common Error Scenarios<a class="headerlink" href="#common-error-scenarios" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Error</th>
+<th>Cause</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Everything passes, but validation never ran</strong></td>
+<td>The credential type carries no <code>eidasConfig</code>, so <code>EidasValidationService</code> is a pass-through</td>
+<td>Set <code>eidasConfig.enabled: true</code> on the credential type. Prove it bites by presenting the same credential under a scope whose <code>allowedCountries</code> no trust service matches -- it must be refused</td>
+</tr>
+<tr>
+<td><code>credential format is "jwt_vc_json" but eIDAS requires "dc+sd-jwt"</code></td>
+<td>eIDAS validation is SD-JWT only</td>
+<td>Issue the credential as <code>dc+sd-jwt</code> and match it in DCQL with <code>meta.vct_values</code></td>
+</tr>
+<tr>
+<td>Credential rejected with no trust store</td>
+<td><code>eidas.enabled</code> is <code>false</code> or the LOTL was unreachable at startup</td>
+<td>Set <code>eidas.enabled: true</code> and verify network connectivity to the EU LOTL URL</td>
+</tr>
+<tr>
+<td><code>organizationIdentifier</code> mismatch (<code>did:elsi</code> only)</td>
+<td>The <code>did:elsi</code> identifier does not match OID 2.5.4.97 in the leaf certificate</td>
+<td>Regenerate the certificate with the correct <code>ORGANISATION_IDENTIFIER</code> matching the DID</td>
+</tr>
+<tr>
+<td>Certificate chain validation failed</td>
+<td>The issuing CA is not in the trust store, or the <code>countries</code> filter excludes it</td>
+<td>Check the <code>countries</code> setting. With locally generated certificates the CA is never in the real EU LOTL -- point <code>lotlUrl</code> at the mock trust list and make sure it carries the current root CA (see <a href="#mocking-the-eu-trusted-list-local-only">Mocking the EU Trusted List</a>)</td>
+</tr>
+<tr>
+<td>Revocation check failed</td>
+<td>OCSP/CRL endpoint unreachable with <code>revocationCheck: "hard"</code></td>
+<td>Switch to <code>"soft"</code> or ensure OCSP/CRL endpoints are reachable; for local testing use <code>"off"</code></td>
+</tr>
+<tr>
+<td>Stale trust list rejected</td>
+<td>A national trust list's <code>NextUpdate</code> is in the past and <code>allowStaleTrustLists: false</code></td>
+<td>Set <code>allowStaleTrustLists: true</code> or investigate why the trust list is not being refreshed</td>
+</tr>
+<tr>
+<td>Slow VCVerifier startup</td>
+<td>Fetching all EU national trust lists takes time</td>
+<td>Use <code>countries</code> filter to limit to relevant countries; increase <code>maxWorkers</code> for faster parallel fetching</td>
+</tr>
+<tr>
+<td>Missing <code>x5c</code> header in credential</td>
+<td>JAdES plugin not installed on consumer Keycloak</td>
+<td>Add the <code>install-jades-issuer</code> init container (see <a href="#jades-plugin-for-x5c-header-injection">JAdES Plugin</a>)</td>
+</tr>
+<tr>
+<td><code>TrustListFetcher: ... lookup eidas-trust-list-mock ... no such host</code></td>
+<td>The mock trust list server is not in the verifier's namespace</td>
+<td>Its manifests need <code>metadata.namespace: {{ .Release.Namespace }}</code>; without it they are applied to <code>default</code></td>
+</tr>
+<tr>
+<td><code>Was not able to read the key file from .</code></td>
+<td><code>verifier.clientIdentification.keyPath</code> is unset</td>
+<td>Harmless in <code>urlEncoded</code> request mode, which needs no request-signing key. Only <code>byValue</code> and <code>byReference</code> require one</td>
+</tr>
+</tbody>
+</table>
+<h3 id="debugging-tips">Debugging Tips<a class="headerlink" href="#debugging-tips" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Check VCVerifier logs for trust store build status at startup.</li>
+<li>Use <code>helm template</code> with your values to verify the <code>eidas</code> block appears
+  in the VCVerifier configmap.</li>
+<li>Decode the credential JWT at <a href="https://jwt.io/">jwt.io</a> to verify the
+  <code>x5c</code> header is present and the <code>iss</code> claim matches the expected DID or
+  issuer URL.</li>
+<li>For test certificates (self-signed), always use <code>revocationCheck: "off"</code>.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../observability/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Observability">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Observability
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../../keycloak/oid4vc-protocol-mappers/" class="md-footer__link md-footer__link--next" aria-label="Next: Keycloak OID4VC Protocol Mappers">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Keycloak OID4VC Protocol Mappers
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.top", "navigation.indexes", "navigation.footer", "toc.follow", "content.code.copy", "content.action.edit", "search.suggest", "search.highlight"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
