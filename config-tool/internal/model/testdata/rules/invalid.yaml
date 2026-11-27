@@ -98,11 +98,11 @@
   rules:
     - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: answers.did.value, unset: false}], message: M, doc: doc/a.md}
 - name: when unset on a feature
-  err: "when[0]: unset and set apply to answers.<foundation id> only, not features.access.verification"
+  err: "when[0]: unset and set apply to answers.<foundation id> and infrastructure.<dependency>[.<question>] only, not features.access.verification"
   rules:
     - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: features.access.verification, unset: true}], message: M, doc: doc/a.md}
 - name: when unset on the environment
-  err: "when[0]: unset and set apply to answers.<foundation id> only, not target.environment"
+  err: "when[0]: unset and set apply to answers.<foundation id> and infrastructure.<dependency>[.<question>] only, not target.environment"
   rules:
     - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: target.environment, unset: true}], message: M, doc: doc/a.md}
 - name: memoryLimit with distinct

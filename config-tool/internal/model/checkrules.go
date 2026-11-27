@@ -28,6 +28,9 @@ const (
 	AnswerFieldPrefix = "answers."
 	// FeatureFieldPrefix starts the field id of a catalogue feature, features.<feature id>; only a when addresses it.
 	FeatureFieldPrefix = "features."
+	// InfrastructureFieldPrefix starts the field id of a Stage 4 answer: infrastructure.<dependency> is its mode,
+	// infrastructure.<dependency>.<question> a question (ADR 0026).
+	InfrastructureFieldPrefix = "infrastructure."
 )
 
 // Values a features.<id> field resolves to; a feature the profile does not record is off.
@@ -174,6 +177,53 @@ func RenderTemplate(id, s string, data map[string]string) (string, error) {
 		return "", err
 	}
 	return sb.String(), nil
+}
+
+// InfraFieldAnswer maps an infrastructure field id to its synthetic answer id; false unless the bundle compiles it.
+func (b Bundle) InfraFieldAnswer(field string) (string, bool) {
+	id, ok := infraFieldID(field)
+	if !ok {
+		return "", false
+	}
+	if _, ok := b.Foundation(id); !ok {
+		return "", false
+	}
+	return id, true
+}
+
+// InfraAnswerField maps a synthetic answer id to its field id; false for any other id.
+func InfraAnswerField(id string) (string, bool) {
+	rest, ok := strings.CutPrefix(id, InfraIDPrefix)
+	if !ok {
+		return "", false
+	}
+	dep, q, ok := strings.Cut(rest, idSeparator)
+	switch {
+	case !ok || dep == "" || q == "":
+		return "", false
+	case q == ModeQuestion:
+		return InfrastructureFieldPrefix + dep, true
+	}
+	return InfrastructureFieldPrefix + rest, true
+}
+
+// infraFieldID maps an infrastructure field id to the synthetic id it names, whether or not a bundle compiles it:
+// the first segment is the dependency, the rest the local question id.
+func infraFieldID(field string) (string, bool) {
+	rest, ok := strings.CutPrefix(field, InfrastructureFieldPrefix)
+	if !ok {
+		return "", false
+	}
+	dep, q, hasQ := strings.Cut(rest, idSeparator)
+	switch {
+	case dep == "":
+		return "", false
+	case !hasQ:
+		return InfraModeID(dep), true
+	case q == "" || q == ModeQuestion:
+		return "", false
+	}
+	return InfraQuestionID(dep, q), true
 }
 
 // TargetFieldIDs lists the Target fields a check rule may address, sorted.
@@ -431,8 +481,9 @@ func checkWhen(w RuleWhen, fs []CompiledFoundation, features []Feature) error {
 	switch {
 	case forms > 1:
 		return fmt.Errorf("%s has more than one of equals, unset and set", w.Field)
-	case (w.Unset || w.Set) && !strings.HasPrefix(w.Field, AnswerFieldPrefix):
-		return fmt.Errorf("unset and set apply to %s<foundation id> only, not %s", AnswerFieldPrefix, w.Field)
+	case (w.Unset || w.Set) && !strings.HasPrefix(w.Field, AnswerFieldPrefix) && !strings.HasPrefix(w.Field, InfrastructureFieldPrefix):
+		return fmt.Errorf("unset and set apply to %s<foundation id> and %s<dependency>[.<question>] only, not %s",
+			AnswerFieldPrefix, InfrastructureFieldPrefix, w.Field)
 	case w.Unset || w.Set:
 		return nil
 	case w.Equals == "":
@@ -448,10 +499,21 @@ func addressable(field string, fs []CompiledFoundation) (Stage, []string, error)
 	if t, ok := targetFields[field]; ok {
 		return t.stage, t.values, nil
 	}
-	id, ok := strings.CutPrefix(field, AnswerFieldPrefix)
+	id, isAnswer := strings.CutPrefix(field, AnswerFieldPrefix)
+	if isAnswer && isInfraID(id) {
+		return "", nil, fmt.Errorf("%q: an infrastructure answer is addressed as %s<dependency>[.<question>]", field, InfrastructureFieldPrefix)
+	}
+	infra, isInfra := infraFieldID(field)
+	if isInfra {
+		id = infra
+	}
 	i := slices.IndexFunc(fs, func(f CompiledFoundation) bool { return f.ID == id })
-	if !ok || i < 0 {
-		return "", nil, fmt.Errorf("%q is neither one of %s nor %s<foundation id>", field, strings.Join(TargetFieldIDs(), ", "), AnswerFieldPrefix)
+	switch {
+	case isInfra && i < 0:
+		return "", nil, fmt.Errorf("%q names no infrastructure dependency or question", field)
+	case !isAnswer && !isInfra, i < 0:
+		return "", nil, fmt.Errorf("%q is neither one of %s nor %s<foundation id> nor %s<dependency>[.<question>]",
+			field, strings.Join(TargetFieldIDs(), ", "), AnswerFieldPrefix, InfrastructureFieldPrefix)
 	}
 	if fs[i].Type == TypeChoice {
 		return fs[i].Stage, fs[i].optionValues(), nil

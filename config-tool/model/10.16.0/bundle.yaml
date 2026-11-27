@@ -4,8 +4,8 @@
 #
 # The foundations list (ADR 0020) holds the cross-cutting answers of Stage 3 and the chart keys they reach:
 #   id       dotted answer id (domain.base): the key in the profile's answers, open field answers.<id>
-#   type     string | hostname | domain | did | url | secretName, each checked with one pattern; choice, one of its
-#            options;
+#   type     string | hostname | domain | did | url | secretName | email, each checked with one pattern; choice, one
+#            of its options;
 #            bool, true or false; credentialTypes, a list of {type, description?}. Only copy writes a bool or a list
 #   group    organization | dataspace | network (default) | platform | egress: the Stage 3 panel that asks it
 #   options  a choice's {value, label, note}; note is optional text shown at the point of choice
@@ -31,7 +31,8 @@
 #   tpl    renders its one template arg
 #   join   renders every template arg and joins the results with sep
 #   copy   takes the answer its one {{ .id }} arg names, keeping its type
-#   const  writes its one scalar arg verbatim; only under a list index, to complete an owned list, or with requires
+#   const  writes its one scalar arg verbatim; only under a list index, to complete an owned list, with requires,
+#          or in an infrastructure mode, whose condition gates it
 # Helm replaces a list instead of merging it, so a path indexes into a list only when the targets write
 # that list whole: indices 0..n-1 and every key of every element. Quote a path in a flow mapping: a plain
 # scalar there cannot hold '[' or ','. internal/render/provider_test.go checks the targets against k3s/provider.yaml.
@@ -49,9 +50,10 @@
 # The rules list (ADR 0021) holds the L2 rules: a finding on field while every when holds.
 #   severity  warning (shown, never blocks) | error (blocks generate)
 #   stage     the stage that shows field; it labels and links the finding
-#   field     target.environment or answers.<foundation id>, the open field the finding points at
+#   field     target.environment, answers.<foundation id> or infrastructure.<dependency>[.<question>] (its mode, or
+#             a question), the open field the finding points at
 #   when      [{field, equals | unset: true}]: all must hold over the resolved answers, so a derived default counts;
-#             field may also be features.<feature id> (equals on|off, absent is off); unset takes answers.<id> only
+#             field may also be features.<feature id> (equals on|off, absent is off); unset takes answers.<id> and infrastructure.* only
 #   distinct  {prefix}, instead of field and when: an error per pair of hostname foundations whose id starts with
 #             prefix (ending in a dot) and that resolve to the same host, ignoring case and a trailing dot. The
 #             message may use {{ .first }}, {{ .second }} (the pair's labels) and {{ .host }}
@@ -73,6 +75,30 @@
 #             a loaded value renamed, may use {{ .service }} and {{ .path }}; unrenamed {{ .service }} only
 #   valueSet  {path}, with field and when as its precondition: the message while the final values hold a non-empty
 #             value at path
+#
+# The infrastructure list (ADR 0026) holds the Stage 4 dependencies. Each compiles into synthetic foundations:
+# infra.<dependency>.mode, a choice without a default, and infra.<dependency>.<question> per question, which
+# templates read as {{ .infra.<dependency>.<question> }}. No declared foundation id starts with infra.
+#   id           one id segment (certManager): the key in the profile's infrastructure map
+#   title, help, doc
+#   clusterWide  a cluster runs the dependency once; its bundled mode must then carry warning and doc
+#   modes        [{id, label, note, warning, doc, development, productionDoc, targets, questions, perIngress,
+#                perIngressQuestion}]: id is bundled | cluster | external; development (suitable for development
+#                only) needs productionDoc. Every target of a mode, its questions' included, renders only while
+#                the mode is chosen, so two modes may write one path
+#     questions  {id, type, label, help, doc, options, default, when: {question, equals}, readOnly, targets}: as a
+#                foundation; id is one segment, unique across the modes, never mode; when names a question of the
+#                same mode by its local id and gates the question and its targets
+#     perIngress [{key, fn, args, sep}]: a target below every ingresses row's path, rendered only while the row's
+#                owner resolves
+#     perIngressQuestion {id, type, label, help, doc, key, replaces}: asked once per ingresses row, as
+#                <id>.<ingress id>, and copied to key below the row's path. replaces writes over the owner's
+#                unconditional target at that path, whose template or constant becomes the default
+#
+# The ingresses table lists every ingress whose TLS the tool owns; the per-ingress forms expand over it.
+#   id     one id segment
+#   path   the ingress block (keycloak.ingress)
+#   owner  the foundation whose <path>.tls[0].secretName target exists; every such target has a row
 chart: data-space-connector
 version: 10.16.0
 revision: 18

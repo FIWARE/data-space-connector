@@ -23,7 +23,7 @@ func TestCoverageRulesValidation(t *testing.T) {
 		name, old, new, err string
 	}{
 		{"set on a feature", "- {field: answers.ca.privateSecret, set: true}",
-			"- {field: features.access.verification, set: true}", "unset and set apply to answers.<foundation id> only"},
+			"- {field: features.access.verification, set: true}", "unset and set apply to answers.<foundation id> and infrastructure.<dependency>[.<question>] only"},
 		{"set with equals", "- {field: answers.ca.privateSecret, set: true}",
 			"- {field: answers.ca.privateSecret, set: true, equals: x}", "has more than one of equals, unset and set"},
 		{"caCoverage without when", "    when:\n      - {field: answers.ca.privateSecret, set: true}\n", "",
