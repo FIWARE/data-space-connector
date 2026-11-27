@@ -51,6 +51,7 @@ type infrastructureJSON struct {
 				Ingress *struct {
 					ID    string `json:"id"`
 					Label string `json:"label"`
+					Owner string `json:"owner"`
 				} `json:"ingress"`
 			} `json:"questions"`
 		} `json:"modes"`
@@ -171,10 +172,16 @@ func TestInfrastructureEndpointShape(t *testing.T) {
 		ingresses = append(ingresses, q.Ingress.ID)
 		switch q.Ingress.ID {
 		case "keycloak":
+			if q.Ingress.Owner != "host.keycloak" {
+				t.Errorf("keycloak ingress owner = %q, want host.keycloak", q.Ingress.Owner)
+			}
 			if !strings.Contains(q.Default, ".host.keycloak") || !strings.HasSuffix(q.Default, "-tls") {
 				t.Errorf("keycloak secret default = %q, want the host foundation's <host>-tls template", q.Default)
 			}
 		case "apisix":
+			if q.Ingress.Owner != "domain.base" {
+				t.Errorf("apisix ingress owner = %q, want domain.base", q.Ingress.Owner)
+			}
 			if q.Default != "apisix-provider-tls" {
 				t.Errorf("apisix secret default = %q, want the replaced const", q.Default)
 			}

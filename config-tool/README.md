@@ -492,7 +492,8 @@ pinned leaf is reported only when its rendered value changes (ADR 0020 §7-8).
 modes}`, empty for a bundle without any; 404 for an unknown bundle). A mode carries `{id, label, note, warning, doc,
 development, productionDoc, keys, questions}`, where `keys` are the chart keys it may write. A question carries `{id,
 type, label, help, doc, options, default, when, readOnly, ingress}`; a per-ingress question appears once per
-`ingresses:` row, its id expanded to `<question>.<ingressId>` and `ingress` naming the row. Every string is bundle data.
+`ingresses:` row, its id expanded to `<question>.<ingressId>` and `ingress` naming the row (`{id, label, owner}`; the
+row renders only while its `owner` foundation resolves). Every string is bundle data.
 The answers travel in the profile's `infrastructure` map, so `PUT /api/profile` validates them and `POST /api/render`
 renders them (ADR 0026).
 

@@ -61,6 +61,7 @@ type questionWhenBody struct {
 type ingressBody struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`
+	Owner string `json:"owner"`
 }
 
 // handleInfrastructure lists the dependencies of chart@version with their modes and questions; an empty version
@@ -106,7 +107,7 @@ func newModeBody(b model.Bundle, dep string, m model.Mode) modeBody {
 			c, _ := b.Foundation(model.InfraQuestionID(dep, id))
 			body.Questions = append(body.Questions, questionBody{
 				ID: id, Type: q.Type, Label: q.Label, Help: q.Help, Doc: q.Doc,
-				Options: []model.Option{}, Default: c.DefaultSource(), Ingress: &ingressBody{ID: row.ID, Label: row.Label},
+				Options: []model.Option{}, Default: c.DefaultSource(), Ingress: &ingressBody{ID: row.ID, Label: row.Label, Owner: row.Owner},
 			})
 		}
 	}
