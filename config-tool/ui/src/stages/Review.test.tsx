@@ -69,20 +69,20 @@ describe('Review', () => {
     ['the placeholder', undefined],
     ['the load report', REPORT],
   ])('lists the open questions above %s, marking the marked ones', (_name, loaded) => {
-    renderReview(loaded, undefined, { answers: { values: {}, role: PICKED, features: {}, target: { ...ANSWERED, namespace: '' } }, open: ['target.environment', 'target.namespace'] })
+    renderReview(loaded, undefined, { answers: { infrastructure: {}, values: {}, role: PICKED, features: {}, target: { ...ANSWERED, namespace: '' } }, open: ['target.environment', 'target.namespace'] })
     expect(screen.getByRole('heading', { level: 3, name: 'Open questions (2)' })).toBeInTheDocument()
     expect(openList().getAllByRole('listitem').map((li) => li.textContent)).toEqual(['NamespaceTargetmarkedgo ↗', 'EnvironmentTargetmarkedgo ↗'])
   })
 
   it('says when no question is open', () => {
-    renderReview(undefined, undefined, { answers: { values: {}, role: PICKED, features: {}, target: ANSWERED } })
+    renderReview(undefined, undefined, { answers: { infrastructure: {}, values: {}, role: PICKED, features: {}, target: ANSWERED } })
     expect(screen.getByRole('heading', { level: 3, name: 'Open questions (0)' })).toBeInTheDocument()
     expect(openList().getByText('None: every question is answered.')).toBeInTheDocument()
     expect(screen.getByLabelText('Validation')).toHaveTextContent('○ 0 open questions')
   })
 
   it('lists an unpicked role with the count the footer shows', () => {
-    renderReview(undefined, undefined, { answers: { values: {}, features: {}, target: ANSWERED } })
+    renderReview(undefined, undefined, { answers: { infrastructure: {}, values: {}, features: {}, target: ANSWERED } })
     expect(screen.getByRole('heading', { level: 3, name: 'Open questions (1)' })).toBeInTheDocument()
     expect(openList().getAllByRole('listitem').map((li) => li.textContent)).toEqual(['RoleRolego ↗'])
     expect(screen.getByLabelText('Validation')).toHaveTextContent('○ 1 open questions')
@@ -90,7 +90,7 @@ describe('Review', () => {
 
   it('lands on Role with the role group focused', async () => {
     mockApi()
-    renderReview(undefined, undefined, { answers: { values: {}, features: {}, target: ANSWERED } })
+    renderReview(undefined, undefined, { answers: { infrastructure: {}, values: {}, features: {}, target: ANSWERED } })
     await userEvent.click(screen.getByRole('button', { name: 'Go to Role' }))
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('What does this organization do in the data space?')
     await waitFor(() => expect(screen.getAllByRole('radio')[0]).toHaveFocus())
@@ -101,7 +101,7 @@ describe('Review', () => {
     ['a marked select', {}, ['target.chartVersion'], 'Chart version', 'Version'],
     ['an unanswered radio group', { environment: '' }, [], 'Environment', 'Development'],
   ])('lands on Target with %s focused', async (_name, change, open, label, input) => {
-    renderReview(undefined, undefined, { answers: { values: {}, role: PICKED, features: {}, target: { ...ANSWERED, ...change } }, open })
+    renderReview(undefined, undefined, { answers: { infrastructure: {}, values: {}, role: PICKED, features: {}, target: { ...ANSWERED, ...change } }, open })
     await userEvent.click(screen.getByRole('button', { name: `Go to ${label}` }))
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Where is this going?')
     expect(screen.getByLabelText(new RegExp(`^${input}`))).toHaveFocus()
@@ -215,7 +215,7 @@ describe('Review', () => {
     ['the placeholder', undefined],
     ['the load report', REPORT],
   ])('lists the deliberate choices with the Stage 5 marker above %s', async (_name, loaded) => {
-    renderReview(loaded, undefined, { answers: { values: {}, role: 'consumer', features: OVERRULED, target: ANSWERED } })
+    renderReview(loaded, undefined, { answers: { infrastructure: {}, values: {}, role: 'consumer', features: OVERRULED, target: ANSWERED } })
     expect(await screen.findByRole('heading', { level: 3, name: `${DELIBERATE_HEADING} (2)` })).toBeInTheDocument()
     expect(deliberateList().getAllByRole('listitem').map((li) => li.textContent)).toEqual([
       `${ISSUER.title}recommended on for Consumer — you turned it offgo ↗`,
@@ -231,7 +231,7 @@ describe('Review', () => {
       { change: { fromRole: 'consumer', toRole: 'provider', enabled: [BROKER.id], disabled: [], kept: [] }, chartSwitch: null },
       { change: { fromRole: 'provider', toRole: 'gone-role', enabled: [], disabled: [BROKER.id], kept: [] }, chartSwitch: null },
     ]
-    renderReview(loaded, undefined, { answers: { values: {}, role: 'gone-role', features: {}, target: ANSWERED }, roleChanges })
+    renderReview(loaded, undefined, { answers: { infrastructure: {}, values: {}, role: 'gone-role', features: {}, target: ANSWERED }, roleChanges })
     const panel = within((await screen.findByRole('heading', { level: 3, name: ROLE_CHANGES_HEADING })).closest('.panel') as HTMLElement)
     expect(await panel.findByText(roleChanged('Consumer', 'Provider'))).toBeInTheDocument()
     expect(panel.getByText(roleChanged('Provider', 'gone-role'))).toBeInTheDocument()
@@ -241,13 +241,13 @@ describe('Review', () => {
   })
 
   it('leaves the role changes out while there is none', async () => {
-    renderReview(undefined, undefined, { answers: { values: {}, role: PICKED, features: {}, target: ANSWERED } })
+    renderReview(undefined, undefined, { answers: { infrastructure: {}, values: {}, role: PICKED, features: {}, target: ANSWERED } })
     await act(async () => {})
     expect(screen.queryByRole('heading', { level: 3, name: ROLE_CHANGES_HEADING })).toBeNull()
   })
 
   it('jumps to Features from a deliberate choice', async () => {
-    renderReview(undefined, undefined, { answers: { values: {}, role: 'consumer', features: OVERRULED, target: ANSWERED } })
+    renderReview(undefined, undefined, { answers: { infrastructure: {}, values: {}, role: 'consumer', features: OVERRULED, target: ANSWERED } })
     await userEvent.click(await screen.findByRole('button', { name: `Go to ${ISSUER.title}` }))
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(FEATURES_HEADING)
   })
@@ -257,7 +257,7 @@ describe('Review', () => {
     ['a user choice equal to the preset', { [ISSUER.id]: { enabled: true, source: 'user' } }],
   ])('leaves the section out with %s only', async (_name, features) => {
     const fetchMock = mockApi()
-    renderReview(undefined, undefined, { answers: { values: {}, role: 'consumer', features, target: ANSWERED } })
+    renderReview(undefined, undefined, { answers: { infrastructure: {}, values: {}, role: 'consumer', features, target: ANSWERED } })
     await waitFor(() => expect(featureRequests(fetchMock)).toHaveLength(1))
     await act(async () => {})
     expect(screen.queryByRole('heading', { name: new RegExp(DELIBERATE_HEADING) })).not.toBeInTheDocument()
@@ -269,7 +269,7 @@ describe('Review', () => {
     mockApi(undefined, undefined, () => reread, undefined, undefined, {
       features: (body) => (refuse ? HTTP_UNPROCESSABLE : recordToggle(body)),
     })
-    renderReview(WRAPPED, FILE, { answers: { values: {}, role: 'consumer', features: OVERRULED, target: ANSWERED } })
+    renderReview(WRAPPED, FILE, { answers: { infrastructure: {}, values: {}, role: 'consumer', features: OVERRULED, target: ANSWERED } })
     expect(await deliberatePanelAlert()).toHaveTextContent(refusedRole(HTTP_UNPROCESSABLE))
     refuse = false
     await userEvent.selectOptions(screen.getByLabelText(ROOT_LABEL), WHOLE_FILE)
@@ -279,7 +279,7 @@ describe('Review', () => {
 
   it('asks nothing about features while no role is picked', async () => {
     const fetchMock = mockApi()
-    renderReview(undefined, undefined, { answers: { values: {}, features: OVERRULED, target: ANSWERED } })
+    renderReview(undefined, undefined, { answers: { infrastructure: {}, values: {}, features: OVERRULED, target: ANSWERED } })
     await act(async () => {})
     expect(featureRequests(fetchMock)).toHaveLength(0)
     expect(screen.queryByRole('heading', { name: new RegExp(DELIBERATE_HEADING) })).not.toBeInTheDocument()
@@ -290,7 +290,7 @@ describe('Review', () => {
     const HAND_HOST = 'sso.acme.com'
     const handSetList = () => within(screen.getByRole('heading', { level: 3, name: HAND_SET_HEADING }).closest('.panel') as HTMLElement)
     const withValues = (values: Record<string, string>): Partial<AppState> => ({
-      answers: { values, role: PICKED, features: {}, target: ANSWERED },
+      answers: { infrastructure: {}, values, role: PICKED, features: {}, target: ANSWERED },
       foundations: FOUNDATIONS.foundations,
     })
 
@@ -332,7 +332,7 @@ describe('Review', () => {
   describe('findings', () => {
     const findingsPanel = () => within(screen.getByRole('heading', { level: 3, name: FINDINGS_HEADING }).closest('.panel') as HTMLElement)
     const withDomain: Partial<AppState> = {
-      answers: { values: { 'domain.base': 'acme.org' }, role: PICKED, features: {}, target: ANSWERED },
+      answers: { infrastructure: {}, values: { 'domain.base': 'acme.org' }, role: PICKED, features: {}, target: ANSWERED },
       foundations: FOUNDATIONS.foundations,
     }
 

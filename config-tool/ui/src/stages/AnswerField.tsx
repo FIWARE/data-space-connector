@@ -6,11 +6,19 @@ import { AskLater } from '../chrome/AskLater'
 import { repositoryDocUrl } from '../links'
 import { useStore } from '../state/context'
 import { answerErrors, defaultApplies, derivedDefault, reservedRefs, resolvedAnswer, textAnswer, validAnswers } from '../state/foundations'
-import { answerFieldId, fieldElementId } from '../state/openQuestions'
+import { answerFieldId, fieldElementId, type FieldId } from '../state/openQuestions'
 import { FindingNote } from './Findings'
 import { describedBy, findingNoteId, usedByText } from './foundationText'
 
 export const RESET_LABEL = 'Reset to derived'
+
+/** Where a field's answer lives when it is not a Stage 3 answer: its field id, value, format error and setter. */
+export interface FieldBinding {
+  field: FieldId
+  value: string | undefined
+  error?: string
+  set: (value: string) => void
+}
 
 /** The "used by" button and, on demand, the paths it stands for. */
 export function UsedBy({ foundation }: { foundation: Foundation }) {
@@ -66,7 +74,7 @@ export function FieldNotes({ foundation, id, error, own }: { foundation: Foundat
 
 /** One answer the user gives: input, error, findings, help, doc link, "ask later" and its fan-out; `reset` drops it in
  *  favour of its derived default. `value`/`onChange` replace the stored answer, for an edit not yet given; `children`
- *  sit next to the input. */
+ *  sit next to the input. `binding` stores the answer elsewhere than in the Stage 3 answers. */
 export function AnswerField({
   foundation,
   findings,
@@ -74,6 +82,7 @@ export function AnswerField({
   value,
   onChange,
   children,
+  binding,
 }: {
   foundation: Foundation
   findings: readonly Finding[]
@@ -81,22 +90,25 @@ export function AnswerField({
   value?: string
   onChange?: (value: string) => void
   children?: ReactNode
+  binding?: FieldBinding
 }) {
   const { state, dispatch } = useStore()
-  const field = answerFieldId(foundation.id)
+  const field = binding?.field ?? answerFieldId(foundation.id)
   const id = fieldElementId(field)
-  const error = answerErrors(state.answers.values, state.foundations, reservedRefs(state.answers.target))[foundation.id]
+  const error = binding ? binding.error : answerErrors(state.answers.values, state.foundations, reservedRefs(state.answers.target))[foundation.id]
+  const stored = binding ? binding.value : textAnswer(state.answers.values[foundation.id])
   const own = findings.filter((f) => f.field === field)
   return (
     <div className="row">
       <label htmlFor={id}>{foundation.label}</label>
       <input
         id={id}
-        value={value ?? textAnswer(state.answers.values[foundation.id]) ?? ''}
+        value={value ?? stored ?? ''}
         aria-invalid={error !== undefined}
         aria-describedby={describedBy(id, error, own)}
         onChange={(e) => {
           if (onChange) onChange(e.target.value)
+          else if (binding) binding.set(e.target.value)
           else dispatch({ type: 'setAnswer', id: foundation.id, value: e.target.value })
         }}
       />
@@ -113,15 +125,17 @@ export function AnswerField({
 }
 
 /** A choice as a radio group, each option with its note; the default option is checked while none is given. A given
- *  choice whose default follows other answers can be reset to it. */
-export function ChoiceField({ foundation, findings }: { foundation: Foundation; findings: readonly Finding[] }) {
+ *  choice whose default follows other answers can be reset to it; one with a `binding` (its resolved value) cannot. */
+export function ChoiceField({ foundation, findings, binding }: { foundation: Foundation; findings: readonly Finding[]; binding?: FieldBinding }) {
   const { state, dispatch } = useStore()
-  const field = answerFieldId(foundation.id)
+  const field = binding?.field ?? answerFieldId(foundation.id)
   const id = fieldElementId(field)
   const foundations = state.foundations ?? []
   const reserved = reservedRefs(state.answers.target)
-  const chosen = resolvedAnswer(foundation.id, state.answers.values, foundations, reserved)
+  const chosen = binding ? binding.value : resolvedAnswer(foundation.id, state.answers.values, foundations, reserved)
+  const choose = (value: string) => (binding ? binding.set(value) : dispatch({ type: 'setAnswer', id: foundation.id, value }))
   const resettable =
+    !binding &&
     state.answers.values[foundation.id] !== undefined &&
     derivedDefault(foundation) &&
     defaultApplies(foundation, validAnswers(state.answers.values, foundations, reserved), foundations, reserved)
@@ -139,7 +153,7 @@ export function ChoiceField({ foundation, findings }: { foundation: Foundation; 
             value={o.value}
             checked={chosen === o.value}
             aria-describedby={o.note ? `${id}-option-${i}-note` : undefined}
-            onChange={() => dispatch({ type: 'setAnswer', id: foundation.id, value: o.value })}
+            onChange={() => choose(o.value)}
           />
           <label htmlFor={`${id}-option-${i}`}>{o.label}</label>
           {o.note && (

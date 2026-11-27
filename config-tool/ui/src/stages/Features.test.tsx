@@ -41,7 +41,7 @@ function onFeatures(role?: string, features: Record<string, FeatureState> = {}):
     entered: true,
     stage: StageId.Features,
     visited: [StageId.Target, StageId.Role, StageId.Features],
-    answers: { values: {}, target: PINNED, role, features: { ...(role ? PRESETS[role] : {}), ...features } },
+    answers: { infrastructure: {}, values: {}, target: PINNED, role, features: { ...(role ? PRESETS[role] : {}), ...features } },
     profileModel: DSC_MODEL,
   }
 }

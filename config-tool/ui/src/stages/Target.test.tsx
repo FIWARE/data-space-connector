@@ -34,7 +34,7 @@ function renderTarget(target: Partial<Target> = {}, session: Session = {}) {
     ...initialState,
     entered: true,
     visited: [StageId.Target],
-    answers: { values: {}, role: 'provider', features: {}, target: { ...initialState.answers.target, ...target } },
+    answers: { infrastructure: {}, values: {}, role: 'provider', features: {}, target: { ...initialState.answers.target, ...target } },
     session,
   })
 }
@@ -85,7 +85,7 @@ function applied(state: AppState, role: string, chart: string, chartSwitch: Char
   return reducer(state, { type: 'roleApplied', profile, chartSwitch, change: null })
 }
 
-const PINNED: AppState = { ...initialState, entered: true, visited: [StageId.Target, StageId.Role], answers: { values: {}, features: {}, target: COMPLETE } }
+const PINNED: AppState = { ...initialState, entered: true, visited: [StageId.Target, StageId.Role], answers: { infrastructure: {}, values: {}, features: {}, target: COMPLETE } }
 const OPERATOR = applied(PINNED, 'operator', TRUST_ANCHOR, { fromChart: DSC, fromVersion: '10.16.0', toChart: TRUST_ANCHOR, droppedChoices: [], carriedAnswers: [], droppedAnswers: [] })
 const SWITCHED_BACK = applied(OPERATOR, 'custom', DSC, { fromChart: TRUST_ANCHOR, fromVersion: '', toChart: DSC, droppedChoices: [], carriedAnswers: [], droppedAnswers: [] })
 const PROVIDER = applied(PINNED, 'provider', DSC, null)

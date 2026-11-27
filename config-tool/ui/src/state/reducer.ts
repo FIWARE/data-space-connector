@@ -2,12 +2,14 @@
 import { VersionSource, type LoadReport } from '../api/load'
 import { answerValues, fromProfile, type ModelRef, type Profile } from '../api/profile'
 import type { Foundation } from '../api/foundations'
+import type { Dependency } from '../api/infrastructure'
 import type { ChartSwitch, RoleChange } from '../api/roles'
 import type { Trial } from '../api/trial'
 import { TIR_ADDRESS_ID, type TirCheck } from './dataspace'
 import { dropMismatched, reservedRefs } from './foundations'
+import { declaredInfrastructure, setInfraAnswer, setInfraMode } from './infrastructure'
 import { emptyAnswers, Environment, type Answers, type AnswerValue, type FeatureState, type Session, type Target } from './answers'
-import { answerFieldId, answerId, fieldStage, isAnswerFieldId, type FieldId, type QuestionId } from './openQuestions'
+import { answerFieldId, answerId, fieldStage, infraField, isAnswerFieldId, isInfraFieldId, type FieldId, type QuestionId } from './openQuestions'
 import { FIRST_STAGE, StageId } from './stageIds'
 
 /** Store contents; `entered` is false while S0 (Start) is shown. */
@@ -49,6 +51,8 @@ export interface AppState {
   roleChanges: readonly AppliedRoleChange[]
   /** The foundations of the target chart once fetched; Review names marked answers by their labels. */
   foundations?: readonly Foundation[]
+  /** Stage 4's dependencies of the target chart once fetched; the rail counts their open questions. */
+  dependencies?: readonly Dependency[]
   /** The last TIR check of this session; read it through `tirCheckOf`, which tells a stale one apart. */
   tirCheck?: TirCheck
 }
@@ -88,6 +92,9 @@ export type Action =
   | { type: 'setAnswer'; id: string; value: AnswerValue }
   | { type: 'tirChecked'; check: TirCheck }
   | { type: 'foundationsLoaded'; foundations: readonly Foundation[] }
+  | { type: 'infrastructureLoaded'; dependencies: readonly Dependency[] }
+  | { type: 'setInfraMode'; dependency: string; mode: string }
+  | { type: 'setInfraAnswer'; dependency: string; question: string; value: AnswerValue }
 
 /** The state before anything was chosen on S0. */
 export const initialState: AppState = {
@@ -140,6 +147,7 @@ function startOver(state: AppState, stage: StageId, answers: Answers, loaded?: L
     roleCleared: undefined,
     roleChanges: [],
     foundations: undefined,
+    dependencies: undefined,
     tirCheck: undefined,
   }
 }
@@ -172,11 +180,14 @@ function roleApplied(state: AppState, { profile, chartSwitch, change }: Extract<
   const target = { ...state.answers.target, chart: profile.target.chart, chartVersion: profile.target.chartVersion }
   const dropped = new Set<FieldId>((chartSwitch?.droppedAnswers ?? []).map(answerFieldId))
   const values = chartSwitch ? answerValues(profile.answers) : state.answers.values
+  // Modes are per chart, so a chart switch drops every infrastructure choice and marker.
+  const infrastructure = chartSwitch ? {} : state.answers.infrastructure
   return {
     ...state,
-    answers: { ...state.answers, target, role: profile.role, features: profile.features ?? {}, values },
-    open: state.open.filter((field) => !dropped.has(field)),
+    answers: { ...state.answers, target, role: profile.role, features: profile.features ?? {}, values, infrastructure },
+    open: state.open.filter((field) => !dropped.has(field) && !(chartSwitch && isInfraFieldId(field))),
     foundations: chartSwitch ? undefined : state.foundations,
+    dependencies: chartSwitch ? undefined : state.dependencies,
     profileModel: profile.model,
     profileCatalogue: profile.catalogue,
     versionOpen: chartSwitch !== null || state.versionOpen,
@@ -198,9 +209,10 @@ function setTarget(state: AppState, change: Partial<Target>): AppState {
   const role = state.answers.role
   return {
     ...state,
-    answers: { ...state.answers, target, role: undefined, features: {}, values: {} },
-    open: state.open.filter((field) => !isAnswerFieldId(field)),
+    answers: { ...state.answers, target, role: undefined, features: {}, values: {}, infrastructure: {} },
+    open: state.open.filter((field) => !isAnswerFieldId(field) && !isInfraFieldId(field)),
     foundations: undefined,
+    dependencies: undefined,
     profileCatalogue: undefined,
     versionOpen,
     chartSwitch: undefined,
@@ -227,6 +239,25 @@ function foundationsLoaded(state: AppState, foundations: readonly Foundation[]):
     answers: pruned ? { ...state.answers, values } : state.answers,
     open: open.length === state.open.length ? state.open : open,
   }
+}
+
+// As with foundations, what the chart version does not declare goes, markers included; the server would refuse it.
+function infrastructureLoaded(state: AppState, dependencies: readonly Dependency[]): AppState {
+  const infrastructure = declaredInfrastructure(state.answers.infrastructure, dependencies)
+  const open = state.open.filter((field) => !isInfraFieldId(field) || declaresField(dependencies, field))
+  return {
+    ...state,
+    dependencies,
+    answers: infrastructure === state.answers.infrastructure ? state.answers : { ...state.answers, infrastructure },
+    open: open.length === state.open.length ? state.open : open,
+  }
+}
+
+function declaresField(dependencies: readonly Dependency[], field: FieldId): boolean {
+  if (!isInfraFieldId(field)) return true
+  const { dependency, question } = infraField(field)
+  const dep = dependencies.find((d) => d.id === dependency)
+  return dep !== undefined && (question === undefined || dep.modes.some((m) => m.questions.some((q) => q.id === question)))
 }
 
 function loadedAnswers(report: LoadReport): Answers {
@@ -298,6 +329,16 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, tirCheck: action.check }
     case 'foundationsLoaded':
       return foundationsLoaded(state, action.foundations)
+    case 'infrastructureLoaded':
+      return infrastructureLoaded(state, action.dependencies)
+    case 'setInfraMode': {
+      const infrastructure = setInfraMode(state.answers.infrastructure, action.dependency, action.mode)
+      return { ...state, answers: { ...state.answers, infrastructure } }
+    }
+    case 'setInfraAnswer': {
+      const infrastructure = setInfraAnswer(state.answers.infrastructure, action.dependency, action.question, action.value)
+      return { ...state, answers: { ...state.answers, infrastructure } }
+    }
     case 'rootRereadStarted':
       return { ...state, rereading: true }
     case 'rootChanged':

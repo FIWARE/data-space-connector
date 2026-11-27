@@ -5,6 +5,7 @@ import type { FeatureState, Profile, ProfileResponse, RecentProfiles } from '../
 import type { FeatureChoice, FeaturesResult, FeatureToggle } from '../api/features'
 import type { Foundation, FoundationList, ResourceTable } from '../api/foundations'
 import type { ImportPreview, ImportResult, TIRCheckResult } from '../api/dataspace'
+import type { Dependency, InfraQuestion, InfrastructureList } from '../api/infrastructure'
 import type { AnswerDiff, Change, ChangeGroup, Finding, HandSetAnswer, Leaf, RenderResult } from '../api/render'
 import type { Feature, Offer, PresetResult, RoleCatalogue, RoleChange } from '../api/roles'
 import type { Kubeconfig, ModelInfo } from '../api/target'
@@ -711,9 +712,101 @@ const DATASPACE_DEFAULTS: Required<DataspaceFakes> = {
   import: (body) => ({ url: `${body.url.replace(/\/$/, '')}${DESCRIPTOR_PATH}`, preview: importPreview(body.profile) }),
 }
 
+/** A question of the fake cert-manager; every field not given is empty. */
+function infraQuestion(q: Partial<InfraQuestion> & Pick<InfraQuestion, 'id' | 'type' | 'label'>): InfraQuestion {
+  return { help: '', doc: '', options: [], default: '', when: null, readOnly: false, ingress: null, ...q }
+}
+
+/** The per-ingress Secret question of the fake cert-manager's external mode, expanded for one ingress. */
+function secretQuestion(ingress: string, label: string, owner: string, template: string): InfraQuestion {
+  return infraQuestion({
+    id: `secret.${ingress}`,
+    type: 'secretName',
+    label: 'TLS Secret',
+    help: 'The Secret of type kubernetes.io/tls that holds the host\'s certificate and key.',
+    default: template,
+    ingress: { id: ingress, label, owner },
+  })
+}
+
+/** cert-manager as the 10.16.0 bundle declares it, with two of its ingresses (APISIX and Keycloak). */
+export const CERT_MANAGER: Dependency = {
+  id: 'certManager',
+  title: 'TLS certificates (cert-manager)',
+  help: 'Who issues the TLS certificates of the public hosts.',
+  doc: 'doc/deployment-integration/roles/PREREQUISITES.md#cert-manager',
+  clusterWide: true,
+  modes: [
+    {
+      id: 'bundled',
+      label: 'Install cert-manager with the connector',
+      note: '',
+      warning: 'A cluster can only have one cert-manager. Install it with the connector only if no other release or installation runs it.',
+      doc: 'doc/deployment-integration/roles/PREREQUISITES.md#installing-the-operators-once',
+      development: false,
+      productionDoc: '',
+      keys: [
+        { path: 'cert-manager.enabled', component: 'cert-manager' },
+        { path: 'certManagerResources.type', component: 'cert-manager' },
+      ],
+      questions: [
+        infraQuestion({
+          id: 'type',
+          type: 'choice',
+          label: 'Issuer',
+          default: 'selfsigned',
+          options: [
+            { value: 'selfsigned', label: 'Self-signed CA', note: 'For testing only.' },
+            { value: 'prod', label: "Let's Encrypt", note: 'Every host has to be reachable from the internet.' },
+          ],
+        }),
+        infraQuestion({ id: 'acmeEmail', type: 'email', label: 'ACME contact', when: { question: 'type', equals: 'prod' } }),
+        infraQuestion({ id: 'ingressClass', type: 'resourceName', label: 'Ingress class', when: { question: 'type', equals: 'prod' } }),
+        infraQuestion({
+          id: 'namespace',
+          type: 'resourceName',
+          label: 'Namespace',
+          readOnly: true,
+          default: '{{ .target.namespace }}',
+          when: { question: 'type', equals: 'selfsigned' },
+        }),
+      ],
+    },
+    {
+      id: 'cluster',
+      label: 'Use the cert-manager already in the cluster',
+      note: '',
+      warning: '',
+      doc: '',
+      development: false,
+      productionDoc: '',
+      keys: [{ path: 'keycloak.ingress.annotations."cert-manager.io/cluster-issuer"', component: 'keycloak' }],
+      questions: [infraQuestion({ id: 'issuer', type: 'resourceName', label: 'ClusterIssuer' })],
+    },
+    {
+      id: 'external',
+      label: 'I provide a TLS Secret per host',
+      note: '',
+      warning: '',
+      doc: '',
+      development: false,
+      productionDoc: '',
+      keys: [{ path: 'keycloak.ingress.tls[0].secretName', component: 'keycloak' }],
+      questions: [
+        secretQuestion('apisix', 'APISIX', 'domain.base', 'apisix-provider-tls'),
+        secretQuestion('keycloak', 'Keycloak', 'host.keycloak', '{{ .host.keycloak }}-tls'),
+      ],
+    },
+  ],
+}
+
+/** The dependencies GET /api/infrastructure answers by default. */
+export const INFRASTRUCTURE: InfrastructureList = { dependencies: [CERT_MANAGER] }
+
 /** Answers GET /api/model with `model`, GET /api/cluster/contexts with `contexts(path)` and POST /api/load with
  *  `load(name, root)`; `root` is null when the upload lets the server detect it. The profile routes use `profiles`,
- *  the trial routes `trial`, the role routes `roles`, the foundation routes `foundations`, the dataspace routes `dataspace`. */
+ *  the trial routes `trial`, the role routes `roles`, the foundation routes `foundations`, the dataspace routes `dataspace`,
+ *  GET /api/infrastructure `infrastructure`. */
 export function mockApi(
   contexts: (path: string) => ContextsAnswer = () => ({ paths: [], contexts: [], current: '' }),
   model: ModelInfo = MODEL,
@@ -723,6 +816,7 @@ export function mockApi(
   roles: RoleFakes = {},
   foundations: FoundationFakes = {},
   dataspace: DataspaceFakes = {},
+  infrastructure: () => InfrastructureList = () => INFRASTRUCTURE,
 ) {
   const fakes = { ...PROFILE_DEFAULTS, ...profiles }
   const trialFakes = { ...TRIAL_DEFAULTS, ...trial }
@@ -783,6 +877,7 @@ export function mockApi(
     if (url.pathname === '/api/dataspace/import' && init?.method === 'POST') {
       return dataspaceAnswer(await dataspaceFakes.import(JSON.parse(String(init.body)) as ImportBody))
     }
+    if (url.pathname === '/api/infrastructure') return json(infrastructure())
     return json({ error: 'not found' }, HTTP_NOT_FOUND)
   })
   vi.stubGlobal('fetch', fetchMock)

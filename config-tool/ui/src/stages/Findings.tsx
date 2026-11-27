@@ -25,7 +25,7 @@ export function FindingNote({ finding, id }: { finding: Finding; id?: string }) 
 /** The link that takes Review to `field` on its stage. */
 function GoTo({ field }: { field: FieldId }) {
   const { state, dispatch } = useStore()
-  const label = fieldLabel(field, state.foundations)
+  const label = fieldLabel(field, state.foundations, state.dependencies)
   return (
     <button type="button" className="link" aria-label={`Go to ${label}`} onClick={() => dispatch({ type: 'focusField', field })}>
       go ↗
@@ -44,7 +44,7 @@ export function Findings({ findings }: { findings: readonly Finding[] }) {
       <ul className="open-questions">
         {findings.map((f) => {
           const field = isFieldId(f.field) ? f.field : undefined
-          const label = field ? fieldLabel(field, state.foundations) : f.field
+          const label = field ? fieldLabel(field, state.foundations, state.dependencies) : f.field
           const related = f.related !== undefined && isFieldId(f.related) ? f.related : undefined
           return (
             <li key={`${f.rule} ${f.field} ${f.related ?? ''}`} className={`finding ${f.severity}`}>
