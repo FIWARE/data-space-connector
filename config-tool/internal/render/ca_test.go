@@ -23,6 +23,13 @@ const (
 	verifierDeploy  = "decentralizedIam.vcAuthentication.vcverifier.deployment"
 	verifierMounts  = verifierDeploy + ".additionalVolumeMounts"
 	keycloakMounts  = "keycloak.extraVolumeMounts"
+	contractDeploy  = "contract-management.deployment"
+	contractMounts  = contractDeploy + ".additionalVolumeMounts"
+	contractEnvVars = "contract-management.additionalEnvVars"
+	// contractBaseSize is the number of OTEL_* elements the umbrella puts into contractEnvVars.
+	contractBaseSize = 9
+	// caStore is where the Contract Management init container writes the trust store its main container reads.
+	caStore = "/ca-store"
 	// bundleImage is the vcverifier chart's own caCert bundle image, which the add-private-ca init container reuses.
 	bundleImage = "vcAuthentication.vcverifier.deployment.serverCertificates.caCert.bundleImage"
 	// k3sVerifier is the verifier block of k3s/provider.yaml (L109-122): root-ca already sits at /etc/ssl/cert.pem.
@@ -39,10 +46,12 @@ const (
 `
 	// foreignTruststore puts a mount the tool does not own at the Keycloak truststore path.
 	foreignTruststore = "keycloak:\n  extraVolumeMounts:\n    - {name: my-ca, mountPath: /opt/keycloak/conf/truststores/private-ca.pem}\n"
+	// foreignCAStore puts a mount the tool does not own at the Contract Management trust store path.
+	foreignCAStore = "contract-management:\n  deployment:\n    additionalVolumeMounts:\n      - {name: my-store, mountPath: " + caStore + "}\n"
 )
 
 // caMechanisms are the per-component mechanisms, one per PREREQUISITES row besides APISIX.
-var caMechanisms = []string{"keycloak-ca", "marketplace-ca", "vc-operator-ca", "verifier-ca"}
+var caMechanisms = []string{"contract-management-ca", "keycloak-ca", "marketplace-ca", "vc-operator-ca", "verifier-ca"}
 
 // secretVolume is the Secret volume every component mounts, with the item path it reads ca.crt under.
 func secretVolume(path string) string {
@@ -71,6 +80,10 @@ var caWant = []struct{ path, want string }{
 	  {name: private-ca, mountPath: /opt/keycloak/conf/truststores/private-ca.pem, subPath: private-ca.pem, readOnly: true}]`},
 	{"keycloak.extraEnvVars", `[{name: KC_HEAP_SIZE, value: "1024m"},
 	  {name: KC_TRUSTSTORE_PATHS, value: /opt/keycloak/conf/truststores/private-ca.pem}]`},
+	{contractDeploy + ".additionalVolumes", "[" + secretVolume("ca.crt") + ", {name: ca-store, emptyDir: {}}]"},
+	{contractMounts, "[{name: ca-store, mountPath: " + caStore + ", readOnly: true}]"},
+	{contractEnvVars + fmt.Sprintf("[%d]", contractBaseSize), `{name: JDK_JAVA_OPTIONS, value: "-Djavax.net.ssl.trustStore=/ca-store/cacerts
+	  -Djavax.net.ssl.trustStorePassword=changeit -Djavax.net.ssl.trustStoreType=PKCS12"}`},
 }
 
 func parseYAML(t *testing.T, s string) any {
@@ -139,6 +152,34 @@ func TestCABundleImage(t *testing.T) {
 	}
 }
 
+// TestContractManagementInit pins the add-private-ca image to the chart's own and its mounts to the mechanism's
+// volumes, under the strict security context.
+func TestContractManagementInit(t *testing.T) {
+	f, ok := subchartFixtures(t)["contract-management"]
+	if !ok {
+		t.Fatal("no contract-management fixture")
+	}
+	repo, _ := lookupValue(f.Values, mustPath(t, "deployment.image.repository"))
+	tree := renderShipped(t, map[string]any{caSecretID: privateCASecret}, "")
+	init, _ := at(t, tree, contractDeploy+".initContainers[0]").(map[string]any)
+	if want := fmt.Sprintf("%v:%s", repo, f.AppVersion); init["image"] != want {
+		t.Errorf("add-private-ca image = %v, want the chart's %s", init["image"], want)
+	}
+	want := parseYAML(t, `{mounts: [{name: private-ca, mountPath: /private-ca, readOnly: true}, {name: ca-store, mountPath: `+caStore+`}],
+	  securityContext: {runAsNonRoot: true, runAsUser: 185, readOnlyRootFilesystem: true, allowPrivilegeEscalation: false,
+	    capabilities: {drop: [ALL]}}}`).(map[string]any)
+	if !reflect.DeepEqual(init["volumeMounts"], want["mounts"]) {
+		t.Errorf("volumeMounts = %#v, want %#v", init["volumeMounts"], want["mounts"])
+	}
+	if !reflect.DeepEqual(init["securityContext"], want["securityContext"]) {
+		t.Errorf("securityContext = %#v, want %#v", init["securityContext"], want["securityContext"])
+	}
+	cmd, _ := init["command"].([]any)
+	if len(cmd) != 3 || !strings.Contains(fmt.Sprint(cmd[2]), caStore+"/cacerts") {
+		t.Errorf("command = %#v, want a script writing %s/cacerts", cmd, caStore)
+	}
+}
+
 // TestCARouteVerify checks that the tool writes ssl_verify true only with a CA and pins a loaded false as a hand edit.
 func TestCARouteVerify(t *testing.T) {
 	route := func(verify string) string {
@@ -181,6 +222,7 @@ func TestCACollision(t *testing.T) {
 		{"k3s root-ca at the verifier bundle path", k3sVerifier, "verifier-ca", verifierMounts, "/etc/ssl/cert.pem", "root-ca"},
 		{"a foreign Keycloak truststore", foreignTruststore, "keycloak-ca", keycloakMounts,
 			"/opt/keycloak/conf/truststores/private-ca.pem", "my-ca"},
+		{"a foreign Contract Management store", foreignCAStore, "contract-management-ca", contractMounts, caStore, "my-store"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -281,16 +323,20 @@ func finalList(t *testing.T, tree Tree, src string, p roundtrip.Path) ([]any, bo
 // mechanismComponent maps each mechanism to the path prefix of the component it reaches, which covers every list
 // the mechanism writes.
 var mechanismComponent = map[string]string{
-	"verifier-ca":    "decentralizedIam.vcAuthentication.vcverifier",
-	"marketplace-ca": "marketplace.bizEcosystemLogicProxy",
-	"vc-operator-ca": "vc-operator",
-	"keycloak-ca":    "keycloak",
+	"contract-management-ca": "contract-management",
+	"verifier-ca":            "decentralizedIam.vcAuthentication.vcverifier",
+	"marketplace-ca":         "marketplace.bizEcosystemLogicProxy",
+	"vc-operator-ca":         "vc-operator",
+	"keycloak-ca":            "keycloak",
 }
 
 // elementAt names the element of a mechanism whose mount collides; both colliding mounts are named so.
 func elementAt(mechanism string) string {
-	if mechanism == "verifier-ca" {
+	switch mechanism {
+	case "verifier-ca":
 		return "private-ca-bundle"
+	case "contract-management-ca":
+		return "ca-store"
 	}
 	return "private-ca"
 }

@@ -9,7 +9,8 @@
 
 US-3.6 (#130) of [`USER_STORIES.md`](../config-tool/USER_STORIES.md) asks for an egress proxy (`proxy.https`,
 `proxy.http`, `proxy.no`) and a private CA (`ca.privateSecret`), each declared once in Stage 3's *Egress* panel and fanned
-out to every component that calls out: the verifier, Keycloak, the marketplace logic proxy, the vc-operator and APISIX.
+out to every component that calls out: the verifier, Keycloak, the marketplace logic proxy, the vc-operator and APISIX,
+and, for the CA, Contract Management.
 Each component takes them through its own mechanism, listed in
 [PREREQUISITES](../deployment-integration/roles/PREREQUISITES.md#private-ca).
 
@@ -155,6 +156,8 @@ service CIDRs, which the vc-operator needs to reach the Kubernetes API directly.
   chart 0.22.0 configures inbound mTLS only, so the PREREQUISITES table is corrected.
 - **vc-operator CA:** `SSL_CERT_DIR`, which Go loads in addition to the system bundle. `SSL_CERT_FILE` replaces it and
   would break calls to publicly signed hosts.
+- **Contract Management CA:** an init container imports `ca.crt` into a copy of the JDK trust store, which the main
+  container reads through `JDK_JAVA_OPTIONS` (see "Deviation from the ticket").
 - **Marketplace logic proxy (BAE 1.2.0, Node 18):** axios honours `HTTPS_PROXY`/`NO_PROXY`; the VC login
   (`passport-vc.js`) uses `https-proxy-agent` whenever `HTTPS_PROXY` is set and ignores `NO_PROXY`. Those two calls
   always go through the proxy, even to an in-cluster verifier. This is a known limitation in BAE code.
@@ -183,7 +186,7 @@ that resolves.
 - `caCoverage` (`ca-coverage`, error) runs while `ca.privateSecret` is set. A component's mechanism counts as in
   effect only if each of its final leaves was rendered by the tool or equals the rendered value, so a loaded element
   that keeps the owned key (`KC_TRUSTSTORE_PATHS`, `SSL_CERT_DIR`, ...) but carries other content is an error, not a
-  pass. A withheld mechanism is a warning naming the foreign element; `mechanism: none` is a warning; a route whose
+  pass. A withheld mechanism is a warning naming the foreign element; a route whose
   final `ssl_verify` is `false` is an error naming its index and `uri`. A loaded untagged `no`, `off` or `n` counts as
   `false`, because Helm reads values as YAML 1.1.
 - `noProxyCoverage` (`no-proxy-coverage`, warning) runs while `proxy.https` resolves and checks each deployed
@@ -204,17 +207,32 @@ is reworded, never allow-listed.
 
 ## Deviation from the ticket
 
-The ticket asks for an L2 *error* when an enabled component that calls a public host has no CA mechanism. Contract
-Management is such a component, and the tool builds no mechanism for it before Step 7 of the implementation plan. Until
-then its `caCoverage` row is `mechanism: none` and yields a **warning** that the hosts it calls need a publicly trusted
-certificate, stating that the mechanism is still missing in the tool, not in the chart. The error is reserved for a
-component whose mechanism the final tree does not carry in effect and for an APISIX route that does not verify. Step 7
-adds the mechanism (contract-management 3.6.3 templates init containers, volumes, mounts and env vars; its image ships
-`keytool`), replaces the row with paths and updates this section.
+Resolved in Step 7. Until then, the ticket's L2 *error* for an enabled component with no CA mechanism was a
+**warning** for Contract Management, because the tool built no mechanism for it. Its `caCoverage` row now names the
+mechanism `contract-management-ca`, so a mechanism that is not in effect is an error like any other, and the warning
+kind (`mechanism: none`) is gone. Checked against contract-management 3.6.3 and its image
+`quay.io/fiware/contract-management:3.4.2`:
+
+- *Its clients use the JVM default trust store.* Its `application.yaml` configures no
+  `micronaut.http.client.ssl` trust store, so Micronaut 4.7.6 `NettyClientSslBuilder.getTrustManagerFactory`
+  (L167-185) returns `null` and Netty falls back to the JDK trust store. The OID4VP client is a `java.net.http`
+  client built by `org.fiware.iam.bean.Oid4VpBeanFactory.httpClient` without an `sslContext`, so it uses
+  `SSLContext.getDefault()`. Both read `javax.net.ssl.trustStore`.
+- *`JDK_JAVA_OPTIONS`.* The image's entrypoint is the `java` launcher (`java -cp @/app/jib-classpath-file ...`,
+  user 185), which reads `JDK_JAVA_OPTIONS` ("Picked up JDK_JAVA_OPTIONS"). `JAVA_TOOL_OPTIONS` stays with the user,
+  who already sets it for proxies and agents (`k3s/dsp-consumer.yaml`); a keyed element of that name would be pinned
+  away by their value.
+- *Bundles.* `keytool -importcert` imports only the first certificate of a PEM file. The init container `add-private-ca`
+  (the Contract Management image, which ships `keytool` and `awk`) copies `$JAVA_HOME/lib/security/cacerts` into a
+  PKCS12 store in the `ca-store` emptyDir (password `changeit`, the JDK default, not a secret), splits `ca.crt` with
+  `awk` and imports every certificate. Run as user 185 with a read-only root file system and no capabilities, a
+  two-certificate `ca.crt` yields 148 public roots plus `private-ca-1` and `private-ca-2`.
+
+The main container mounts `ca-store` read-only at `/ca-store`, outside the chart's own `/application.yaml` mount.
 
 ## Consequences
 
-- A proxy or a private CA is one answer, rendered into five components without overwriting the elements other stories
+- A proxy or a private CA is one answer, rendered into five or six components without overwriting the elements other stories
   or the user put into the same lists.
 - A hand-made mechanism that collides with the tool's is kept, and the tool's is withheld and reported instead of
   half-written.

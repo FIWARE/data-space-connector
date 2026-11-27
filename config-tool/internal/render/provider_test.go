@@ -812,6 +812,8 @@ var providerCAExclusions = []caExclusion{
 		"US-3.6: k3s turns the logic proxy's verification off instead, which the tool never writes"},
 	{regexp.MustCompile(`^vc-operator\.(extraVolumes|extraVolumeMounts|extraEnvVars)\[\d+\]\.`),
 		"US-3.6: k3s mounts the CA into /etc/ssl/certs; the fan-out uses its own mount and SSL_CERT_DIR"},
+	{regexp.MustCompile(`^contract-management\.(deployment\.(initContainers|additionalVolumes|additionalVolumeMounts)|additionalEnvVars)\[\d+\]\.`),
+		"US-3.6: k3s gives Contract Management no trust store, because it calls only in-cluster HTTP hosts"},
 }
 
 // TestProviderCA renders the private CA over provider.yaml. The verifier mechanism is withheld, because k3s

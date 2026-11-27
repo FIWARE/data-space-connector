@@ -61,14 +61,13 @@
 #             of the resources table that deploys and ends up without a memory limit (rendered, loaded, a fallback
 #             path or chartMemoryLimit, which a loaded null drops). The message may use {{ .components }}
 #   caCoverage {components: [{id, label, enabledKeys, mechanism | paths}], routes: {path, verify, uri, component},
-#             withheldCollision, withheldEdited, withheldConflict, none, route}, with field and when (set: true takes
+#             withheldCollision, withheldEdited, withheldConflict, route}, with field and when (set: true takes
 #             answers.<id> only) as its precondition, over the deployed components (ADR 0025). The rule's severity
 #             applies to one finding naming every component whose mechanism (all its element targets) or paths are
 #             not in effect: absent, or pinned to another value. The message may use {{ .components }}. A withheld
 #             mechanism is a warning per component (withheld*: {{ .component }}, {{ .element }}, {{ .list }}, and
-#             {{ .field }}, {{ .value }}, {{ .foreign }} for a collision, or {{ .paths }} for a conflict); mechanism:
-#             none is one warning naming them all (none: {{ .components }}). route is one finding of the rule's
-#             severity per route whose final verify key is false ({{ .index }}, {{ .uri }})
+#             {{ .field }}, {{ .value }}, {{ .foreign }} for a collision, or {{ .paths }} for a conflict). route is
+#             one finding of the rule's severity per route whose final verify key is false ({{ .index }}, {{ .uri }})
 #   noProxyCoverage {answer, unrenamed}, with field and when as its precondition: a warning per noProxyServices row
 #             whose effective name the resolved answer does not bypass for a Go client. The message, for a service
 #             a loaded value renamed, may use {{ .service }} and {{ .path }}; unrenamed {{ .service }} only
@@ -76,7 +75,7 @@
 #             value at path
 chart: data-space-connector
 version: 10.16.0
-revision: 17
+revision: 18
 topLevelKeys: [
   nameOverride, fullnameOverride, imagePullSecrets, issuance, decentralizedIam, scorpio, elsi,
   keycloak, tm-forum-api, statusListServer, rainbow, contract-management, did, registration,
@@ -398,8 +397,7 @@ rules:
         - {id: keycloak, label: Keycloak, mechanism: keycloak-ca, enabledKeys: {keycloak.enabled: true}}
         - {id: marketplace, label: marketplace, mechanism: marketplace-ca, enabledKeys: {marketplace.enabled: false}}
         - {id: vcOperator, label: vc-operator, mechanism: vc-operator-ca, enabledKeys: {vc-operator.enabled: false}}
-        # Step 7 of #130 gives it a mechanism (ADR 0025, "Deviation from the ticket").
-        - {id: contractManagement, label: contract-management, mechanism: none,
+        - {id: contractManagement, label: contract-management, mechanism: contract-management-ca,
            enabledKeys: {contract-management.enabled: true}}
       routes: {path: decentralizedIam.odrlAuthorization.apisix.routes, verify: plugins.openid-connect.ssl_verify,
                uri: uri, component: apisix}
@@ -414,9 +412,6 @@ rules:
       withheldConflict: >-
         {{ .component }} does not get the private CA: the loaded file sets {{ .paths }}, so the chart already
         mounts its own CA bundle there. The tool cannot tell whether that bundle holds the private CA; check it.
-      none: >-
-        The tool cannot give {{ .components }} the private CA yet. Until it can, the hosts they call need a
-        publicly trusted certificate.
       route: >-
         APISIX route {{ .index }} ({{ .uri }}) does not verify the certificate of its OpenID provider: the loaded
         file sets ssl_verify to false. Remove it, so the tool can turn verification on.
@@ -549,6 +544,25 @@ lists:
     unique: [mountPath]
     base:
       - {name: realms, mountPath: /opt/keycloak/data/import}
+  - path: contract-management.additionalEnvVars
+    key: name
+    base:
+      - {name: OTEL_SDK_DISABLED, value: "true"}
+      - {name: OTEL_SERVICE_NAME, value: contract-management}
+      - {name: OTEL_EXPORTER_OTLP_ENDPOINT, value: ""}
+      - {name: OTEL_EXPORTER_OTLP_PROTOCOL, value: grpc}
+      - {name: OTEL_TRACES_SAMPLER, value: parentbased_traceidratio}
+      - {name: OTEL_TRACES_SAMPLER_ARG, value: "1.0"}
+      - {name: OTEL_PROPAGATORS, value: "tracecontext,baggage"}
+      - {name: OTEL_METRICS_EXPORTER, value: none}
+      - {name: OTEL_LOGS_EXPORTER, value: none}
+  - path: contract-management.deployment.initContainers
+    key: name
+  - path: contract-management.deployment.additionalVolumes
+    key: name
+  - path: contract-management.deployment.additionalVolumeMounts
+    key: name
+    unique: [mountPath]
 # The in-cluster services a proxied component calls, which the proxy.no default bypasses by bare name (ADR 0025).
 # name is a template over target.release and target.namespace; overrides are the value paths that rename the
 # service, the first set one wins. Otherwise a set nameOverride replaces the chart name in fullname, as Helm's
@@ -1224,4 +1238,52 @@ foundations:
       - path: keycloak.extraEnvVars
         mechanism: keycloak-ca
         element: {key: KC_TRUSTSTORE_PATHS, value: {value: /opt/keycloak/conf/truststores/private-ca.pem}}
+        requires: [ca.privateSecret]
+      # Its Micronaut and java.net.http clients use the JVM default trust store. The init container copies the JDK's
+      # cacerts (password changeit, the JDK default) and adds every certificate of ca.crt: keytool imports only the
+      # first certificate of a PEM file. The image is the chart's own; internal/render/ca_test.go pins it.
+      - path: contract-management.deployment.additionalVolumes
+        mechanism: contract-management-ca
+        element: {key: private-ca, value: {secret: {secretName: "{{ .ca.privateSecret }}", items: [{key: ca.crt, path: ca.crt}]}}}
+      - path: contract-management.deployment.additionalVolumes
+        mechanism: contract-management-ca
+        element: {key: ca-store, value: {emptyDir: {}}}
+        requires: [ca.privateSecret]
+      - path: contract-management.deployment.initContainers
+        mechanism: contract-management-ca
+        element:
+          key: add-private-ca
+          value:
+            image: quay.io/fiware/contract-management:3.4.2
+            command:
+              - sh
+              - -c
+              - |
+                set -e
+                keytool -importkeystore -noprompt -srckeystore "$JAVA_HOME/lib/security/cacerts" -srcstorepass changeit -destkeystore /ca-store/cacerts -deststoretype PKCS12 -deststorepass changeit
+                awk '/-BEGIN CERTIFICATE-/ {n++; p=1} p {print > ("/ca-store/private-ca-" n ".pem")} /-END CERTIFICATE-/ {p=0}' /private-ca/ca.crt
+                for f in /ca-store/private-ca-*.pem; do keytool -importcert -noprompt -keystore /ca-store/cacerts -storetype PKCS12 -storepass changeit -alias "$(basename "$f" .pem)" -file "$f"; rm "$f"; done
+            volumeMounts:
+              - {name: private-ca, mountPath: /private-ca, readOnly: true}
+              - {name: ca-store, mountPath: /ca-store}
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 185
+              readOnlyRootFilesystem: true
+              allowPrivilegeEscalation: false
+              capabilities: {drop: [ALL]}
+        requires: [ca.privateSecret]
+      - path: contract-management.deployment.additionalVolumeMounts
+        mechanism: contract-management-ca
+        element: {key: ca-store, value: {mountPath: /ca-store, readOnly: true}}
+        requires: [ca.privateSecret]
+      # JDK_JAVA_OPTIONS, which the java launcher reads, leaves JAVA_TOOL_OPTIONS to the user's agents and proxies.
+      - path: contract-management.additionalEnvVars
+        mechanism: contract-management-ca
+        element:
+          key: JDK_JAVA_OPTIONS
+          value:
+            value: >-
+              -Djavax.net.ssl.trustStore=/ca-store/cacerts -Djavax.net.ssl.trustStorePassword=changeit
+              -Djavax.net.ssl.trustStoreType=PKCS12
         requires: [ca.privateSecret]

@@ -47,7 +47,8 @@ const APISIX: EgressComponent = { id: 'apisix', label: 'APISIX', prefix: 'decent
 const KEYCLOAK: EgressComponent = { id: 'keycloak', label: 'Keycloak', prefix: 'keycloak.' }
 const MARKETPLACE: EgressComponent = { id: 'marketplace', label: 'Marketplace', prefix: 'marketplace.' }
 const VC_OPERATOR: EgressComponent = { id: 'vcOperator', label: 'vc-operator', prefix: 'vc-operator.' }
-const COMPONENTS = [VERIFIER, APISIX, KEYCLOAK, MARKETPLACE, VC_OPERATOR]
+const CONTRACT_MANAGEMENT: EgressComponent = { id: 'contractManagement', label: 'Contract Management', prefix: 'contract-management.' }
+const COMPONENTS = [VERIFIER, APISIX, KEYCLOAK, MARKETPLACE, VC_OPERATOR, CONTRACT_MANAGEMENT]
 
 /** What the last render left for the preview: its leaves, the withheld mechanisms and the required Secrets. */
 export interface EgressRender {

@@ -44,7 +44,6 @@ func TestCoverageRulesValidation(t *testing.T) {
 			`component "nope" names no entry`},
 		{"withheld key unknown", "{{ .component }} does not get the private CA: the loaded file sets {{ .paths }}",
 			"{{ .component }} does not get the private CA: the loaded file sets {{ .list }}", "{{ .list }} is not one of"},
-		{"none missing", "      none: >-\n", "      nothing: >-\n", "field nothing not found"},
 		{"noProxyCoverage answer unknown", "answer: proxy.no", "answer: proxy.none", `answer "proxy.none" names no foundation`},
 		{"noProxyCoverage key unknown", "Add {{ .service }} to No proxy.", "Add {{ .components }} to No proxy.",
 			"{{ .components }} is not one of"},

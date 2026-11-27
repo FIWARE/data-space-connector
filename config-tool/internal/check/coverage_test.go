@@ -22,18 +22,20 @@ const (
 	namespace      = "provider"
 	withheldPrefix = " does not get the private CA"
 	notReached     = "The private CA does not reach "
-	noMechanism    = "The tool cannot give "
 
 	apisixRoutes = "decentralizedIam:\n  odrlAuthorization:\n    apisix:\n      routes:\n" +
 		"        - uri: /a\n          plugins:\n            openid-connect:\n"
 	verifierMounts = "decentralizedIam:\n  vcAuthentication:\n    vcverifier:\n      deployment:\n" +
 		"        additionalVolumeMounts:\n          - name: root-ca\n            mountPath: /etc/ssl/cert.pem\n" +
 		"            subPath: cert.pem\n"
-	keycloakEnv     = "keycloak:\n  extraEnvVars:\n    - name: KC_TRUSTSTORE_PATHS\n      value: "
-	keycloakIdp     = "keycloak:\n  fullnameOverride: idp\n"
-	enableAddOns    = "marketplace:\n  enabled: true\nvc-operator:\n  enabled: true\n"
-	disableContract = "contract-management:\n  enabled: false\n"
-	enableTracing   = "opentelemetry-collector:\n  enabled: true\n"
+	keycloakEnv  = "keycloak:\n  extraEnvVars:\n    - name: KC_TRUSTSTORE_PATHS\n      value: "
+	keycloakIdp  = "keycloak:\n  fullnameOverride: idp\n"
+	enableAddOns = "marketplace:\n  enabled: true\nvc-operator:\n  enabled: true\n"
+	// contractEnv sets JDK_JAVA_OPTIONS for something else, as a user adding an agent would.
+	contractEnv   = "contract-management:\n  additionalEnvVars:\n    - name: JDK_JAVA_OPTIONS\n      value: -Xss1m\n"
+	contractMount = "contract-management:\n  deployment:\n    additionalVolumeMounts:\n" +
+		"      - name: my-store\n        mountPath: /ca-store\n"
+	enableTracing = "opentelemetry-collector:\n  enabled: true\n"
 	// proxyMappings is the string form the chart declares, with the value k3s/provider.yaml sets.
 	proxyMappings = "keycloak:\n  proxy:\n    spiProxyMappings: \".*\\\\.127\\\\.0\\\\.0\\\\.1\\\\.nip\\\\.io;http://squid-proxy.infra.svc.cluster.local:8888\"\n"
 	tilRenamed    = "decentralizedIam:\n  vcAuthentication:\n    trusted-issuers-list:\n      fullnameOverride: til\n"
@@ -73,7 +75,6 @@ func wantPrefixes(t *testing.T, kind string, got, want []string) {
 // components without one warn, and a route that does not verify errors.
 func TestCACoverage(t *testing.T) {
 	b := shipped(t)
-	contract := noMechanism + "contract-management"
 	tests := []struct {
 		name   string
 		noCA   bool
@@ -82,45 +83,47 @@ func TestCACoverage(t *testing.T) {
 		errs, warns []string
 	}{
 		{name: "CA unset", noCA: true, loaded: keycloakEnv + "/other\n" + apisixRoutes + "              ssl_verify: false\n"},
-		{name: "all covered", warns: []string{contract}},
-		{name: "marketplace and vc-operator covered", loaded: enableAddOns, warns: []string{contract}},
-		{name: "contract-management disabled", loaded: disableContract},
+		{name: "all covered"},
+		{name: "marketplace and vc-operator covered", loaded: enableAddOns},
+		{name: "contract-management pinned away", loaded: contractEnv,
+			errs: []string{notReached + "contract-management:"}},
+		{name: "contract-management disabled", loaded: contractEnv + "  enabled: false\n"},
+		{name: "contract-management withheld by a foreign mount", loaded: contractMount,
+			warns: []string{"contract-management" + withheldPrefix + ": its element ca-store would share mountPath"}},
 		{name: "scalar deleted by a loaded null",
 			loaded: "decentralizedIam:\n  odrlAuthorization:\n    apisix:\n      apisix:\n        ssl:\n          existingCASecret: null\n",
-			errs:   []string{notReached + "APISIX:"}, warns: []string{contract}},
+			errs:   []string{notReached + "APISIX:"}},
 		{name: "element missing from the loaded list is added again",
-			loaded: "keycloak:\n  extraEnvVars:\n    - name: KC_HEAP_SIZE\n      value: 2g\n", warns: []string{contract}},
+			loaded: "keycloak:\n  extraEnvVars:\n    - name: KC_HEAP_SIZE\n      value: 2g\n"},
 		{name: "owned element pinned to another value", loaded: keycloakEnv + "/other\n",
-			errs: []string{notReached + "Keycloak:"}, warns: []string{contract}},
+			errs: []string{notReached + "Keycloak:"}},
 		{name: "owned element with the rendered value",
-			loaded: keycloakEnv + "/opt/keycloak/conf/truststores/private-ca.pem\n", warns: []string{contract}},
+			loaded: keycloakEnv + "/opt/keycloak/conf/truststores/private-ca.pem\n"},
 		{name: "two components pinned away", loaded: keycloakEnv + "/other\n" +
 			"vc-operator:\n  enabled: true\n  extraEnvVars:\n    - name: SSL_CERT_DIR\n      value: /etc/ssl/certs\n",
-			errs: []string{notReached + "Keycloak, vc-operator:"}, warns: []string{contract}},
+			errs: []string{notReached + "Keycloak, vc-operator:"}},
 		{name: "verifier withheld by the k3s root-ca mount", loaded: verifierMounts,
-			warns: []string{"verifier" + withheldPrefix + ": its element private-ca-bundle would share mountPath", contract}},
+			warns: []string{"verifier" + withheldPrefix + ": its element private-ca-bundle would share mountPath"}},
 		{name: "keycloak list edited", loaded: "keycloak:\n  extraEnvVars: {}\n",
-			warns: []string{"Keycloak" + withheldPrefix + ": the loaded file changed", contract}},
+			warns: []string{"Keycloak" + withheldPrefix + ": the loaded file changed"}},
 		{name: "verifier conflicts with the chart's caCert",
 			loaded: "decentralizedIam:\n  vcAuthentication:\n    vcverifier:\n      deployment:\n        serverCertificates:\n" +
 				"          caCert:\n            enabled: true\n",
-			warns: []string{"verifier" + withheldPrefix + ": the loaded file sets", contract}},
-		{name: "route verify unset", loaded: apisixRoutes + "              client_id: c\n", warns: []string{contract}},
+			warns: []string{"verifier" + withheldPrefix + ": the loaded file sets"}},
+		{name: "route verify unset", loaded: apisixRoutes + "              client_id: c\n"},
 		{name: "route verify pinned false", loaded: apisixRoutes + "              ssl_verify: false\n",
-			errs: []string{"APISIX route 0 (/a) does not verify"}, warns: []string{contract}},
+			errs: []string{"APISIX route 0 (/a) does not verify"}},
 		{name: "route verify no, false to Helm's YAML 1.1", loaded: apisixRoutes + "              ssl_verify: no\n",
-			errs: []string{"APISIX route 0 (/a) does not verify"}, warns: []string{contract}},
+			errs: []string{"APISIX route 0 (/a) does not verify"}},
 		{name: "route verify OFF", loaded: apisixRoutes + "              ssl_verify: OFF\n",
-			errs: []string{"APISIX route 0 (/a) does not verify"}, warns: []string{contract}},
-		{name: "route verify quoted no is a string", loaded: apisixRoutes + "              ssl_verify: \"no\"\n",
-			warns: []string{contract}},
-		{name: "route verify true", loaded: apisixRoutes + "              ssl_verify: true\n", warns: []string{contract}},
+			errs: []string{"APISIX route 0 (/a) does not verify"}},
+		{name: "route verify quoted no is a string", loaded: apisixRoutes + "              ssl_verify: \"no\"\n"},
+		{name: "route verify true", loaded: apisixRoutes + "              ssl_verify: true\n"},
 		{name: "APISIX disabled skips its routes", loaded: apisixRoutes + "              ssl_verify: false\n" +
-			"      enabled: false\n", warns: []string{contract}},
+			"      enabled: false\n"},
 		{name: "odrl-authorization disabled skips its routes", loaded: apisixRoutes +
-			"              ssl_verify: false\n    enabled: false\n", warns: []string{contract}},
-		{name: "verifier disabled is not withheld", loaded: verifierMounts + "      enabled: false\n",
-			warns: []string{contract}},
+			"              ssl_verify: false\n    enabled: false\n"},
+		{name: "verifier disabled is not withheld", loaded: verifierMounts + "      enabled: false\n"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
