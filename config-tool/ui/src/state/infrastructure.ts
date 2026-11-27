@@ -2,7 +2,7 @@
 import type { Foundation } from '../api/foundations'
 import type { Dependency, InfraQuestion, Mode } from '../api/infrastructure'
 import type { AnswerValue, InfraChoice } from './answers'
-import { checkAnswer, fill, textAnswer, validAnswers, type ReservedRefs } from './foundations'
+import { checkAnswer, fill, resolvedAnswer, textAnswer, validAnswers, type ReservedRefs } from './foundations'
 import { infraModeFieldId, infraQuestionFieldId, type InfraFieldId } from './openQuestions'
 
 /** What an infrastructure default may refer to: the Stage 3 answers the render is sent and the reserved refs. */
@@ -45,13 +45,25 @@ export function questionValue(q: InfraQuestion, choice: InfraChoice, ctx: InfraC
   return given ?? derivedValue(q, ctx)
 }
 
-/** The questions `mode` asks right now: those whose `when` holds over the resolved answers of the same mode. */
+/** The questions `mode` asks right now: those whose `when` holds over the resolved answers of the same mode, and
+ *  per-ingress ones only while their ingress's owner resolves, as only then does the answer render. */
 export function shownQuestions(mode: Mode, choice: InfraChoice, ctx: InfraContext): InfraQuestion[] {
-  return mode.questions.filter((q) => {
-    if (!q.when) return true
-    const other = mode.questions.find((o) => o.id === q.when?.question)
-    return other !== undefined && questionValue(other, choice, ctx) === q.when.equals
-  })
+  return mode.questions.filter((q) => whenHolds(mode, q, choice, ctx) && ownerResolves(q, ctx))
+}
+
+/** The per-ingress questions of `mode` held back because their ingress's owner (a Stage 3 host) is unresolved. */
+export function pendingIngressQuestions(mode: Mode, choice: InfraChoice, ctx: InfraContext): InfraQuestion[] {
+  return mode.questions.filter((q) => whenHolds(mode, q, choice, ctx) && !ownerResolves(q, ctx))
+}
+
+function whenHolds(mode: Mode, q: InfraQuestion, choice: InfraChoice, ctx: InfraContext): boolean {
+  if (!q.when) return true
+  const other = mode.questions.find((o) => o.id === q.when?.question)
+  return other !== undefined && questionValue(other, choice, ctx) === q.when.equals
+}
+
+function ownerResolves(q: InfraQuestion, ctx: InfraContext): boolean {
+  return !q.ingress || resolvedAnswer(q.ingress.owner, ctx.values, ctx.foundations, ctx.reserved) !== undefined
 }
 
 /** The format error of every given answer of a known question, by field id, inactive modes included. */

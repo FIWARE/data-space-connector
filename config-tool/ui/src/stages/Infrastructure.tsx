@@ -1,15 +1,25 @@
 /** S4 Infrastructure: per dependency, how it is provided (three modes) and what the chosen mode asks (ADR 0026). */
 import { useEffect, useRef, useState } from 'react'
-import { fetchFoundations, type Foundation } from '../api/foundations'
-import { fetchInfrastructure, type Dependency, type InfraQuestion, type Mode } from '../api/infrastructure'
+import type { Foundation } from '../api/foundations'
+import type { Dependency, InfraQuestion, Mode } from '../api/infrastructure'
 import { toProfile } from '../api/profile'
 import { fetchRender, type Finding } from '../api/render'
 import { AskLater } from '../chrome/AskLater'
+import { useBundleDataError } from '../chrome/bundleData'
 import { repositoryDocUrl } from '../links'
 import type { InfraChoice } from '../state/answers'
 import { useStore } from '../state/context'
 import { checkAnswer, reservedRefs, textAnswer } from '../state/foundations'
-import { activeMode, choiceOf, derivedValue, infraContext, questionValue, shownQuestions, type InfraContext } from '../state/infrastructure'
+import {
+  activeMode,
+  choiceOf,
+  derivedValue,
+  infraContext,
+  pendingIngressQuestions,
+  questionValue,
+  shownQuestions,
+  type InfraContext,
+} from '../state/infrastructure'
 import { fieldElementId, fieldStage, infraModeFieldId, infraQuestionFieldId } from '../state/openQuestions'
 import { StageId } from '../state/stageIds'
 import { AnswerField, ChoiceField, FieldNotes, type FieldBinding } from './AnswerField'
@@ -17,14 +27,17 @@ import { FindingNote } from './Findings'
 import { describedBy, findingNoteId } from './foundationText'
 import { RENDER_DEBOUNCE_MS } from './Foundations'
 import {
+  aboutLink,
   DERIVED_BADGE,
   DERIVED_PENDING,
   DEVELOPMENT_BADGE,
   INFRASTRUCTURE_HEADING,
   NO_DEPENDENCIES,
   PRODUCTION_LINK,
+  pendingIngressesText,
   SECRETS_NOTE,
   WARNING_LINK,
+  WARNING_PREFIX,
   writesListLabel,
   writesText,
 } from './infrastructureText'
@@ -131,7 +144,8 @@ function ModeQuestions({ dep, mode, choice, ctx, findings }: { dep: Dependency; 
   const shown = shownQuestions(mode, choice, ctx)
   const plain = shown.filter((q) => !q.ingress)
   const perIngress = shown.filter((q) => q.ingress)
-  const [group] = perIngress
+  const pending = pendingIngressQuestions(mode, choice, ctx)
+  const group = perIngress[0] ?? pending[0]
   const props = (q: InfraQuestion) => ({ dependency: dep.id, question: q, choice, ctx, findings })
   return (
     <>
@@ -147,6 +161,7 @@ function ModeQuestions({ dep, mode, choice, ctx, findings }: { dep: Dependency; 
           {perIngress.map((q) => (
             <QuestionField key={q.id} {...props(q)} label={q.ingress?.label ?? q.label} help="" />
           ))}
+          {pending.length > 0 && <p className="hint">{pendingIngressesText(pending.map((q) => q.ingress?.label ?? q.label))}</p>}
         </div>
       )}
     </>
@@ -203,14 +218,14 @@ function DependencyCard({ dep, ctx, findings }: { dep: Dependency; ctx: InfraCon
           {dep.help}{' '}
           {dep.doc && (
             <a href={repositoryDocUrl(dep.doc)} target="_blank" rel="noreferrer">
-              About {dep.title} ↗
+              {aboutLink(dep.title)}
             </a>
           )}
         </p>
       </fieldset>
       {mode?.warning && (
         <p className="hint" role="note">
-          ⚠ {mode.warning}{' '}
+          {WARNING_PREFIX} {mode.warning}{' '}
           {mode.doc && (
             <a href={repositoryDocUrl(mode.doc)} target="_blank" rel="noreferrer">
               {WARNING_LINK}
@@ -274,30 +289,8 @@ function useFindings(): { findings: readonly Finding[]; error?: string } {
 /** S4 Infrastructure screen. */
 export function Infrastructure() {
   const { state, dispatch } = useStore()
-  const { chart, chartVersion } = state.answers.target
-  const [error, setError] = useState<string>()
+  const error = useBundleDataError()
   const { findings, error: renderError } = useFindings()
-  const foundationsKnown = state.foundations !== undefined
-
-  useEffect(() => {
-    const controller = new AbortController()
-    fetchInfrastructure(chart, chartVersion, controller.signal).then(
-      (list) => dispatch({ type: 'infrastructureLoaded', dependencies: list.dependencies }),
-      (err: Error) => controller.signal.aborted || setError(err.message),
-    )
-    return () => controller.abort()
-  }, [chart, chartVersion, dispatch])
-
-  // The per-host defaults derive from Stage 3's hosts, so their foundations are needed even if Stage 3 was skipped.
-  useEffect(() => {
-    if (foundationsKnown) return
-    const controller = new AbortController()
-    fetchFoundations(chart, chartVersion, controller.signal).then(
-      (list) => dispatch({ type: 'foundationsLoaded', foundations: list.foundations }),
-      (err: Error) => controller.signal.aborted || setError(err.message),
-    )
-    return () => controller.abort()
-  }, [chart, chartVersion, foundationsKnown, dispatch])
 
   // A Review link may arrive before the dependencies, so the field is focused once its input exists.
   useEffect(() => {

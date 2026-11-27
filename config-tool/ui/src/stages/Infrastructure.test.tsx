@@ -12,7 +12,7 @@ import { initialState, type AppState } from '../state/reducer'
 import { StageId } from '../state/stageIds'
 import { StoreProvider } from '../state/store'
 import { CERT_MANAGER, FOUNDATIONS, mockApi } from '../test/api'
-import { DERIVED_BADGE, DEVELOPMENT_BADGE, PRODUCTION_LINK, WARNING_LINK, writesListLabel, writesText } from './infrastructureText'
+import { DERIVED_BADGE, DEVELOPMENT_BADGE, pendingIngressesText, PRODUCTION_LINK, WARNING_LINK, writesListLabel, writesText } from './infrastructureText'
 
 const NAMESPACE = 'dsc'
 const DOMAIN = 'provider.org'
@@ -43,10 +43,14 @@ function findingsRender(findings: Finding[]) {
   return (): RenderResult => ({ tree: { leaves: [] }, diff: { groups: [] }, derived: { rederived: [], pinned: [] }, handSet: [], findings, secrets: [] })
 }
 
-function renderStage({ dependencies = [CERT_MANAGER], findings = [] }: { dependencies?: Dependency[]; findings?: Finding[] } = {}) {
+function renderStage({
+  dependencies = [CERT_MANAGER],
+  findings = [],
+  values = { 'domain.base': DOMAIN },
+}: { dependencies?: Dependency[]; findings?: Finding[]; values?: Record<string, AnswerValue> } = {}) {
   mockApi(undefined, undefined, undefined, {}, {}, {}, { foundations: () => FOUNDATIONS, render: findingsRender(findings) }, {}, () => ({ dependencies }))
   render(
-    <StoreProvider initial={onInfrastructure({ 'domain.base': DOMAIN })}>
+    <StoreProvider initial={onInfrastructure(values)}>
       <Chrome stages={STAGES} />
     </StoreProvider>,
   )
@@ -108,6 +112,18 @@ describe('Infrastructure', () => {
     const group = await card()
     expect(within(group).getByLabelText('APISIX')).toHaveValue('apisix-provider-tls')
     expect(within(group).getByLabelText('Keycloak')).toHaveValue(`keycloak.${DOMAIN}-tls`)
+  })
+
+  it('holds back the Secret rows of ingresses whose host is unknown, without counting them', async () => {
+    renderStage({ values: {} })
+    await card()
+    const unchosen = openCount()
+    await choose(EXTERNAL)
+    const group = await card()
+    expect(await textboxes()).toEqual([])
+    expect(within(group).getByText(pendingIngressesText(['APISIX', 'Keycloak']))).toBeInTheDocument()
+    // Choosing the mode answers it, and the held-back rows add nothing.
+    expect(openCount()).toBe(unchosen - 1)
   })
 
   it('lists the chosen mode’s keys in the writes disclosure', async () => {

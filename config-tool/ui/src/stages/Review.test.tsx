@@ -10,7 +10,7 @@ import type { FieldId } from '../state/openQuestions'
 import { initialState, type AppliedRoleChange, type AppState } from '../state/reducer'
 import { StageId } from '../state/stageIds'
 import { StoreProvider } from '../state/store'
-import { catalogueFeature, DOMAIN_WARNING, FOUNDATIONS, lateLoad, mockApi, recordToggle, refusedRole, REPORT, refusedUpload, renderWithFindings } from '../test/api'
+import { catalogueFeature, CERT_MANAGER, DOMAIN_WARNING, FOUNDATIONS, lateLoad, mockApi, recordToggle, refusedRole, REPORT, refusedUpload, renderWithFindings } from '../test/api'
 import { repositoryDocUrl } from '../links'
 import { FINDINGS_HEADING, FINDINGS_HINT, READ_MORE, stageName } from './findingsText'
 import { DELIBERATE_HEADING } from './DeliberateChoices'
@@ -36,6 +36,9 @@ const ANSWERED: Target = {
   chartVersion: '10.16.0',
   environment: Environment.Production,
 }
+
+/** Stage 4 answered: cert-manager from the cluster, its one question given. */
+const CHOSEN = { certManager: { mode: 'cluster', answers: { issuer: 'letsencrypt' } } }
 
 function renderReview(loaded?: LoadReport, loadedFile?: File, more: Partial<AppState> = {}) {
   return render(
@@ -75,10 +78,17 @@ describe('Review', () => {
   })
 
   it('says when no question is open', () => {
-    renderReview(undefined, undefined, { answers: { infrastructure: {}, values: {}, role: PICKED, features: {}, target: ANSWERED } })
+    renderReview(undefined, undefined, { answers: { infrastructure: CHOSEN, values: {}, role: PICKED, features: {}, target: ANSWERED } })
     expect(screen.getByRole('heading', { level: 3, name: 'Open questions (0)' })).toBeInTheDocument()
     expect(openList().getByText('None: every question is answered.')).toBeInTheDocument()
     expect(screen.getByLabelText('Validation')).toHaveTextContent('○ 0 open questions')
+  })
+
+  it('counts an unchosen Stage 4 mode without Stage 4 ever being visited', async () => {
+    renderReview(undefined, undefined, { answers: { infrastructure: {}, values: {}, role: PICKED, features: {}, target: ANSWERED } })
+    expect(await screen.findByRole('heading', { level: 3, name: 'Open questions (1)' })).toBeInTheDocument()
+    expect(openList().getAllByRole('listitem').map((li) => li.textContent)).toEqual([`${CERT_MANAGER.title}Infrastructurego ↗`])
+    expect(screen.getByLabelText('Validation')).toHaveTextContent('○ 1 open questions')
   })
 
   it('lists an unpicked role with the count the footer shows', () => {

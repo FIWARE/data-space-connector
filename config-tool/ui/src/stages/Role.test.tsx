@@ -34,6 +34,8 @@ import {
   TURNS_ON,
 } from './roleChangeText'
 
+// The footer counts every stage, and the mocked bundle's cert-manager mode stays unchosen in these tests.
+const INFRA_OPEN = 1
 const HTTP_UNPROCESSABLE = 422
 const DSC = 'data-space-connector'
 const TRUST_ANCHOR = 'trust-anchor'
@@ -289,12 +291,12 @@ describe('Role', () => {
   it('counts a missing role as an open question until a role is picked', async () => {
     renderRole(ON_ROLE, { preset: serverPreset().preset })
     await findCards()
-    expect(screen.getByLabelText('Validation')).toHaveTextContent('○ 1 open questions')
+    await waitFor(() => expect(screen.getByLabelText('Validation')).toHaveTextContent(`○ ${1 + INFRA_OPEN} open questions`))
     await userEvent.click(screen.getByRole('button', { name: /1 Target/ }))
     expect(within(screen.getByRole('button', { name: /2 Role/ })).getByLabelText('has open questions')).toHaveTextContent('○')
     await userEvent.click(screen.getByRole('button', { name: /2 Role/ }))
     await userEvent.click(card('Provider'))
-    await waitFor(() => expect(screen.getByLabelText('Validation')).toHaveTextContent('○ 0 open questions'))
+    await waitFor(() => expect(screen.getByLabelText('Validation')).toHaveTextContent(`○ ${INFRA_OPEN} open questions`))
     await userEvent.click(screen.getByRole('button', { name: /1 Target/ }))
     expect(within(screen.getByRole('button', { name: /2 Role/ })).getByLabelText('complete')).toHaveTextContent('✓')
   })

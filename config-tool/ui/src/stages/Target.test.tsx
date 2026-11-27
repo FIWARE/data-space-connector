@@ -13,6 +13,8 @@ import { StageId } from '../state/stageIds'
 import { StoreProvider } from '../state/store'
 import { HTTP_NOT_FOUND, MODEL, mockApi, refusedKubeconfig, type ContextsAnswer } from '../test/api'
 
+// The footer counts every stage, and the mocked bundle's cert-manager mode stays unchosen in these tests.
+const INFRA_OPEN = 1
 const KUBECONFIG = '/home/me/.kube/config'
 const ONE_FILE: ContextsAnswer = { paths: [KUBECONFIG], contexts: ['dev', 'prod'], current: 'dev' }
 const TWO_FILES: ContextsAnswer = { paths: ['/a/config', '/b/config'], contexts: ['dev', 'prod'], current: 'prod' }
@@ -253,7 +255,7 @@ describe('Target', () => {
     ['a cluster without a context', { type: TargetType.Cluster, namespace: 'provider', releaseName: 'provider', environment: Environment.Production }, 0, 1],
   ])('counts open questions and errors for %s inputs', async (_name, target, errors, open) => {
     renderTarget(target)
-    await waitFor(() => expect(screen.getByLabelText('Validation')).toHaveTextContent(`✖ ${errors} errors○ ${open} open questions`))
+    await waitFor(() => expect(screen.getByLabelText('Validation')).toHaveTextContent(`✖ ${errors} errors○ ${open + INFRA_OPEN} open questions`))
   })
 
   it.each<[string, string, Partial<Target>]>([
@@ -267,7 +269,7 @@ describe('Target', () => {
     await userEvent.click(ask)
     expect(ask).toHaveAttribute('aria-pressed', 'true')
     expect(probe.state.answers.target).toMatchObject(value)
-    expect(screen.getByLabelText('Validation')).toHaveTextContent('✖ 0 errors○ 1 open questions')
+    await waitFor(() => expect(screen.getByLabelText('Validation')).toHaveTextContent(`✖ 0 errors○ ${1 + INFRA_OPEN} open questions`))
 
     await userEvent.click(railEntry(1))
     expect(within(railEntry(0)).getByLabelText('has open questions')).toHaveTextContent('○')
@@ -276,13 +278,13 @@ describe('Target', () => {
     await userEvent.click(screen.getByRole('button', { name: `Ask ${label} later` }))
     expect(probe.state.open).toEqual([])
     expect(probe.state.answers.target).toMatchObject(value)
-    expect(screen.getByLabelText('Validation')).toHaveTextContent('○ 0 open questions')
+    expect(screen.getByLabelText('Validation')).toHaveTextContent(`○ ${INFRA_OPEN} open questions`)
   })
 
   it('counts a marked empty field once, as open and not as an error', async () => {
     renderTarget({ type: TargetType.File, releaseName: 'provider', environment: Environment.Production })
     await userEvent.click(screen.getByRole('button', { name: 'Ask Namespace later' }))
-    await waitFor(() => expect(screen.getByLabelText('Validation')).toHaveTextContent('✖ 0 errors○ 1 open questions'))
+    await waitFor(() => expect(screen.getByLabelText('Validation')).toHaveTextContent(`✖ 0 errors○ ${1 + INFRA_OPEN} open questions`))
   })
 
   it.each<[string, AppState, string, string[]]>([
@@ -297,7 +299,7 @@ describe('Target', () => {
     expect(within(version).getAllByRole('option').map((o) => o.textContent)).toEqual(['— choose a version —', ...versions])
     expect(version).toHaveValue('')
     expect(probe.state.answers.target.chartVersion).toBe('')
-    expect(screen.getByLabelText('Validation')).toHaveTextContent('✖ 0 errors○ 1 open questions')
+    await waitFor(() => expect(screen.getByLabelText('Validation')).toHaveTextContent(`✖ 0 errors○ ${1 + INFRA_OPEN} open questions`))
     await userEvent.click(railEntry(1))
     expect(within(railEntry(0)).getByLabelText('has open questions')).toHaveTextContent('○')
   })
@@ -314,7 +316,7 @@ describe('Target', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(notice)
     expect(probe.state.answers).toMatchObject({ role: undefined, features: {} })
     expect(probe.state.profileCatalogue).toBeUndefined()
-    expect(screen.getByLabelText('Validation')).toHaveTextContent('✖ 0 errors○ 1 open questions')
+    await waitFor(() => expect(screen.getByLabelText('Validation')).toHaveTextContent(`✖ 0 errors○ ${1 + INFRA_OPEN} open questions`))
     expect(within(railEntry(1)).getByLabelText('has open questions')).toHaveTextContent('○')
   })
 })
