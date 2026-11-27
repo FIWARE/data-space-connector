@@ -68,6 +68,12 @@ markdown_extensions:
 plugins:
   - search
 
+# Version selector in the header, driven by mike (one version per chart release,
+# plus a moving "latest"). See .github/workflows/release.yml (deploy-docs job).
+extra:
+  version:
+    provider: mike
+
 # Files kept in the repo for GitHub browsing but left out of the site:
 #  - /README.md        : the detailed doc index; the site has its own home (index.md) and nav
 #  - aws-garnet-iot-module/ : a vendored third-party module's meta files

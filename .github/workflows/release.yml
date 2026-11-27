@@ -58,3 +58,48 @@ jobs:
       version: ${{ needs.generate-version.outputs.version }}
       files: |
         LICENSE
+
+  # Publishes the documentation site to GitHub Pages with mike: one entry per
+  # release plus a moving "latest". It runs after chart-release so the Helm
+  # repository index.yaml that chart-releaser keeps at the root of gh-pages is
+  # already committed; mike only adds/updates its own paths (the version folder,
+  # versions.json, the root redirect), leaving index.yaml and the charts intact.
+  # Same workflow, serialized by the concurrency group above, so the two never
+  # push to gh-pages at the same time.
+  deploy-docs:
+    name: "Publish the documentation site"
+    needs: ["generate-version", "chart-release"]
+    if: needs.generate-version.outputs.version != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install MkDocs and mike
+        run: pip install -r .github/docs-requirements.txt
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # Point the local gh-pages at the real published branch so mike commits on
+      # top of it (preserving index.yaml) instead of starting a fresh history.
+      - name: Base the deploy on the published gh-pages
+        run: |
+          git fetch origin gh-pages
+          git branch -f gh-pages origin/gh-pages
+
+      - name: Deploy with mike
+        run: |
+          VERSION='${{ needs.generate-version.outputs.version }}'
+          mike deploy --push --update-aliases "$VERSION" latest
+          mike set-default --push latest
