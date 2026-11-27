@@ -107,12 +107,13 @@ func TestInfrastructureReplacedDefaults(t *testing.T) {
 	b := loadFixture(t, validInfrastructure)
 	answers := map[string]any{"domain": map[string]any{"base": "example.org"}, "host": map[string]any{"keycloak": "kc.example.org"}}
 	tests := []struct {
-		id   string
-		refs []string
-		want string
+		id     string
+		refs   []string
+		source string
+		want   string
 	}{
-		{"infra.certManager.secret.apisix", []string{modeAnswer}, "apisix-provider-tls"},
-		{"infra.certManager.secret.keycloak", []string{"host.keycloak", modeAnswer}, "kc.example.org-tls"},
+		{"infra.certManager.secret.apisix", []string{modeAnswer}, "apisix-provider-tls", "apisix-provider-tls"},
+		{"infra.certManager.secret.keycloak", []string{"host.keycloak", modeAnswer}, "{{.host.keycloak}}-tls", "kc.example.org-tls"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.id, func(t *testing.T) {
@@ -125,6 +126,9 @@ func TestInfrastructureReplacedDefaults(t *testing.T) {
 			}
 			if got, err := Execute(f.DefaultTemplate(), answers); err != nil || got != tc.want {
 				t.Errorf("default = %q, %v; want %q", got, err, tc.want)
+			}
+			if got := f.DefaultSource(); got != tc.source {
+				t.Errorf("DefaultSource() = %q, want %q", got, tc.source)
 			}
 		})
 	}

@@ -148,6 +148,11 @@ func InfraQuestionID(dep, question string) string {
 	return InfraIDPrefix + dep + idSeparator + question
 }
 
+// IngressQuestionID is the local id a per-ingress question expands to for ingress row ingress.
+func IngressQuestionID(question, ingress string) string {
+	return question + idSeparator + ingress
+}
+
 // IsInfraID reports whether id is, or lies under, the reserved infra namespace of the synthetic foundations.
 func IsInfraID(id string) bool {
 	return id == strings.TrimSuffix(InfraIDPrefix, idSeparator) || strings.HasPrefix(id, InfraIDPrefix)
@@ -373,7 +378,7 @@ func compileDependency(d Dependency, rows []ingressRow, fs []CompiledFoundation,
 			return nil, nil, fmt.Errorf("%s: %w", qw, err)
 		}
 		for _, r := range rows {
-			local := q.ID + idSeparator + r.ID
+			local := IngressQuestionID(q.ID, r.ID)
 			if other, ok := seen[local]; ok {
 				return nil, nil, fmt.Errorf("%s: id %q is already declared by %s", qw, local, other)
 			}
@@ -486,7 +491,7 @@ func compileIngressQuestion(dep string, q IngressQuestion, r ingressRow, fs []Co
 	if err := checkOptionalDoc("doc", q.Doc); err != nil {
 		return CompiledFoundation{}, err
 	}
-	id := InfraQuestionID(dep, q.ID+idSeparator+r.ID)
+	id := InfraQuestionID(dep, IngressQuestionID(q.ID, r.ID))
 	path := r.Path + idSeparator + q.Key
 	f := Foundation{ID: id, Stage: StageInfrastructure, Type: q.Type, Label: q.Label}
 	var constant *string
@@ -513,6 +518,7 @@ func compileIngressQuestion(dep string, q IngressQuestion, r ingressRow, fs []Co
 		if c.deflt, _, err = parseTemplate(id, *constant); err != nil {
 			return CompiledFoundation{}, fmt.Errorf("replaces: %w", err)
 		}
+		c.defaultSource = *constant
 	}
 	c.askedWhen(when)
 	t := Target{Path: path, Fn: FnCopy, Args: []any{"{{ ." + id + " }}"}, Requires: r.requires}

@@ -488,6 +488,15 @@ default, with the value they would derive. The diff groups `added`, `changed`, `
 previous render of the same source. A load, a profile open or a render of another source resets that baseline. A
 pinned leaf is reported only when its rendered value changes (ADR 0020 §7-8).
 
+`GET /api/infrastructure?chart=&version=` lists the Stage 4 dependencies (`{id, title, help, doc, clusterWide,
+modes}`, empty for a bundle without any; 404 for an unknown bundle). A mode carries `{id, label, note, warning, doc,
+development, productionDoc, keys, questions}`, where `keys` are the chart keys it may write. A question carries `{id,
+type, label, help, doc, options, default, when, readOnly, ingress}`; a per-ingress question appears once per
+`ingresses:` row, its id expanded to `<question>.<ingressId>` and `ingress` naming the row (`{id, label, owner}`; the
+row renders only while its `owner` foundation resolves). Every string is bundle data.
+The answers travel in the profile's `infrastructure` map, so `PUT /api/profile` validates them and `POST /api/render`
+renders them (ADR 0026).
+
 ### Rules and findings
 
 A bundle's `rules:` are L2 checks across answers ([ADR 0021](../doc/adr/0021-config-tool-l2-rules.md)). Each rule has
