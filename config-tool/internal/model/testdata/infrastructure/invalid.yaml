@@ -1,0 +1,234 @@
+# Each case replaces top-level sections of valid.yaml with override; Versions must refuse the result with an error
+# containing err.
+- name: duplicate dependency id
+  err: 'infrastructure[1]: id "db" is already declared by infrastructure[0]'
+  override:
+    infrastructure:
+      - {id: db, title: DB, modes: [{id: external, label: External}]}
+      - {id: db, title: DB, modes: [{id: external, label: External}]}
+- name: duplicate mode id
+  err: 'modes[1] (external): id "external" is already declared'
+  override:
+    infrastructure:
+      - {id: db, title: DB, modes: [{id: external, label: External}, {id: external, label: Again}]}
+- name: duplicate question id across modes
+  err: 'modes[1] (external): questions[0] (host): id "host" is already declared by modes[0] (cluster): questions[0] (host)'
+  override:
+    infrastructure:
+      - id: db
+        title: DB
+        modes:
+          - {id: cluster, label: Cluster, questions: [{id: host, type: hostname, label: Host}]}
+          - {id: external, label: External, questions: [{id: host, type: hostname, label: Host}]}
+- name: mode id outside the three
+  err: 'modes[0] (hosted): id "hosted" is not one of bundled, cluster, external'
+  override:
+    infrastructure:
+      - {id: db, title: DB, modes: [{id: hosted, label: Hosted}]}
+- name: dependency id not one segment
+  err: 'id "cert-manager" is not a letter'
+  override:
+    infrastructure:
+      - {id: cert-manager, title: DB, modes: [{id: external, label: External}]}
+- name: declared foundation under infra
+  err: 'foundations[0]: id "infra.db.mode" lies under infra.'
+  override:
+    foundations:
+      - {id: infra.db.mode, stage: foundations, type: string, label: Mode}
+- name: ingress owner without a secretName target
+  err: 'ingresses[0] (other): owner host.keycloak has no unconditional target keycloak.other.tls[0].secretName'
+  override:
+    ingresses:
+      - {id: other, label: Other, path: keycloak.other, owner: host.keycloak}
+- name: ingress owner is no foundation
+  err: 'ingresses[0] (apisix): owner "host.apisix" is no declared foundation'
+  override:
+    ingresses:
+      - {id: apisix, label: APISIX, path: apisix.ingress, owner: host.apisix}
+- name: owned secretName without a row
+  err: 'targets[2]: keycloak.ingress.tls[0].secretName is a TLS Secret name no ingresses row lists'
+  override:
+    ingresses:
+      - {id: apisix, label: APISIX, path: apisix.ingress, owner: domain.base}
+- name: ingress id not one segment
+  err: 'ingresses[1]: id "key-cloak" is not a letter'
+  override:
+    ingresses:
+      - {id: apisix, label: APISIX, path: apisix.ingress, owner: domain.base}
+      - {id: key-cloak, label: Keycloak, path: keycloak.ingress, owner: host.keycloak}
+- name: per-ingress targets without the ingresses table
+  err: 'modes[0] (cluster): perIngress and perIngressQuestion need the ingresses table'
+  override:
+    ingresses: []
+    infrastructure:
+      - id: db
+        title: DB
+        modes: [{id: cluster, label: Cluster, perIngress: [{key: annotations.a, fn: const, args: [x]}]}]
+- name: non-exclusive shared path
+  err: 'path "keycloak.ingress.hostname" is already written by foundations[1] targets[0]'
+  override:
+    infrastructure:
+      - {id: db, title: DB, modes: [{id: external, label: External, targets: [{path: keycloak.ingress.hostname, fn: const, args: [x]}]}]}
+- name: two questions on one path in one mode
+  err: 'path "postgres.host" is already written by'
+  override:
+    infrastructure:
+      - id: db
+        title: DB
+        modes:
+          - id: external
+            label: External
+            questions:
+              - {id: a, type: hostname, label: A, targets: [{path: postgres.host, fn: copy, args: ["{{ .infra.db.a }}"]}]}
+              - {id: b, type: hostname, label: B, targets: [{path: postgres.host, fn: copy, args: ["{{ .infra.db.b }}"]}]}
+- name: unconditioned top-level const
+  err: "const is only allowed under a list index"
+  override:
+    foundations:
+      - {id: a, stage: foundations, type: string, label: A, targets: [{path: postgres.enabled, fn: const, args: [true]}]}
+- name: replaces without an unconditional foundation target
+  err: 'replaces: no unconditional foundation target writes apisix.ingress.annotations.a'
+  override:
+    infrastructure:
+      - id: db
+        title: DB
+        modes: [{id: external, label: External, perIngressQuestion: {id: secret, type: secretName, label: S, key: annotations.a, replaces: true}}]
+- name: replaced constant of another type
+  err: 'replaces: the replaced constant must be a host name'
+  override:
+    infrastructure:
+      - id: db
+        title: DB
+        modes: [{id: external, label: External, perIngressQuestion: {id: host, type: hostname, label: H, key: 'tls[0].secretName', replaces: true}}]
+    foundations:
+      - id: domain.base
+        stage: foundations
+        type: domain
+        label: Base domain
+        targets: [{path: 'apisix.ingress.tls[0].secretName', fn: const, args: [APISIX]}]
+      - id: host.keycloak
+        stage: foundations
+        type: hostname
+        label: Keycloak host
+        targets: [{path: 'keycloak.ingress.tls[0].secretName', fn: tpl, args: ["{{ .host.keycloak }}-tls"]}]
+- name: cluster-wide without a bundled warning
+  err: 'modes[0] (bundled): the dependency is cluster-wide, so its bundled mode needs a warning and a doc'
+  override:
+    infrastructure:
+      - {id: db, title: DB, clusterWide: true, modes: [{id: bundled, label: Bundled, doc: doc/README.md}]}
+- name: cluster-wide without a bundled doc
+  err: 'needs a warning and a doc'
+  override:
+    infrastructure:
+      - {id: db, title: DB, clusterWide: true, modes: [{id: bundled, label: Bundled, warning: Only one}]}
+- name: development without productionDoc
+  err: 'modes[0] (bundled): a development mode needs a productionDoc'
+  override:
+    infrastructure:
+      - {id: db, title: DB, modes: [{id: bundled, label: Bundled, development: true}]}
+- name: doc that is a URL
+  err: 'doc: doc "https://example.org" is not a repo-relative path'
+  override:
+    infrastructure:
+      - {id: db, title: DB, doc: "https://example.org", modes: [{id: bundled, label: Bundled}]}
+- name: question when naming an unknown question
+  err: 'questions[0] (port): when: "kind" is no question of mode external'
+  override:
+    infrastructure:
+      - id: db
+        title: DB
+        modes: [{id: external, label: External, questions: [{id: port, type: string, label: Port, when: {question: kind, equals: x}}]}]
+- name: question when on a value its choice lacks
+  err: 'when: "managed" is not an option of kind'
+  override:
+    infrastructure:
+      - id: db
+        title: DB
+        modes:
+          - id: external
+            label: External
+            questions:
+              - {id: kind, type: choice, label: Kind, options: [{value: plain, label: Plain}]}
+              - {id: port, type: string, label: Port, when: {question: kind, equals: managed}}
+- name: question with the reserved id mode
+  err: 'questions[0] (mode): id "mode" is reserved'
+  override:
+    infrastructure:
+      - {id: db, title: DB, modes: [{id: external, label: External, questions: [{id: mode, type: string, label: Mode}]}]}
+- name: per-ingress question with the reserved id mode
+  err: 'perIngressQuestion (mode): id "mode" is reserved'
+  override:
+    infrastructure:
+      - id: db
+        title: DB
+        modes: [{id: external, label: External, perIngressQuestion: {id: mode, type: secretName, label: S, key: 'tls[0].secretName', replaces: true}}]
+- name: question id with a dot
+  err: 'questions[0] (tls.secret): id "tls.secret" is not one segment'
+  override:
+    infrastructure:
+      - {id: db, title: DB, modes: [{id: external, label: External, questions: [{id: tls.secret, type: secretName, label: S}]}]}
+- name: plain question beside a per-ingress question of the same id
+  err: 'modes[1] (external): perIngressQuestion (secret) shares its id with modes[0] (cluster): questions[0] (secret)'
+  override:
+    infrastructure:
+      - id: db
+        title: DB
+        modes:
+          - {id: cluster, label: Cluster, questions: [{id: secret, type: secretName, label: S}]}
+          - {id: external, label: External, perIngressQuestion: {id: secret, type: secretName, label: S, key: 'tls[0].secretName', replaces: true}}
+- name: two per-ingress questions of the same id
+  err: 'modes[1] (external): perIngressQuestion (secret): id "secret.apisix" is already declared by modes[0] (cluster): perIngressQuestion (secret)'
+  override:
+    infrastructure:
+      - id: db
+        title: DB
+        modes:
+          - {id: cluster, label: Cluster, perIngressQuestion: {id: secret, type: secretName, label: S, key: annotations.a}}
+          - {id: external, label: External, perIngressQuestion: {id: secret, type: secretName, label: S, key: annotations.b}}
+- name: readOnly question without a default
+  err: 'questions[0] (ns): a readOnly question needs a default'
+  override:
+    infrastructure:
+      - {id: db, title: DB, modes: [{id: bundled, label: Bundled, questions: [{id: ns, type: string, label: NS, readOnly: true}]}]}
+- name: element target on an infrastructure answer
+  err: 'element and each targets are not allowed on an infrastructure answer'
+  override:
+    infrastructure:
+      - id: db
+        title: DB
+        modes: [{id: bundled, label: Bundled, targets: [{path: postgres.env, element: {key: A, value: {value: x}}}]}]
+- name: target reading an unknown answer
+  err: 'references unknown answer "infra.db.port"'
+  override:
+    infrastructure:
+      - {id: db, title: DB, modes: [{id: bundled, label: Bundled, targets: [{path: postgres.port, fn: copy, args: ["{{ .infra.db.port }}"]}]}]}
+- name: rule field naming an unknown dependency
+  err: 'rules[0]: field: "infrastructure.nope" names no infrastructure dependency or question'
+  override:
+    rules:
+      - {id: r, severity: error, stage: infrastructure, field: infrastructure.nope, when: [{field: infrastructure.certManager, equals: bundled}], message: M}
+- name: rule when naming an unknown question
+  err: 'when[0]: "infrastructure.certManager.nope" names no infrastructure dependency or question'
+  override:
+    rules:
+      - {id: r, severity: error, stage: infrastructure, field: infrastructure.certManager, when: [{field: infrastructure.certManager.nope, unset: true}], message: M}
+- name: rule field naming the reserved mode question
+  err: '"infrastructure.certManager.mode" is neither one of'
+  override:
+    rules:
+      - {id: r, severity: error, stage: infrastructure, field: infrastructure.certManager.mode, when: [{field: infrastructure.certManager, equals: bundled}], message: M}
+- name: rule when comparing a mode the dependency lacks
+  err: '"hosted" is not a value of infrastructure.certManager (bundled, cluster, external)'
+  override:
+    rules:
+      - {id: r, severity: error, stage: infrastructure, field: infrastructure.certManager, when: [{field: infrastructure.certManager, equals: hosted}], message: M}
+- name: rule field addressing an infra answer as answers
+  err: '"answers.infra.certManager.issuer": an infrastructure answer is addressed as infrastructure.'
+  override:
+    rules:
+      - {id: r, severity: error, stage: infrastructure, field: answers.infra.certManager.issuer, when: [{field: infrastructure.certManager, equals: cluster}], message: M}
+- name: rule on an infrastructure field in another stage
+  err: 'stage foundations is not infrastructure, the stage of field infrastructure.certManager.issuer'
+  override:
+    rules:
+      - {id: r, severity: error, stage: foundations, field: infrastructure.certManager.issuer, when: [{field: infrastructure.certManager, equals: cluster}], message: M}

@@ -42,6 +42,9 @@ const (
 	TypeCredentialTypes FoundationType = "credentialTypes"
 	// TypeSecretName is the name of a Kubernetes Secret: a DNS-1123 subdomain, like TypeHostname.
 	TypeSecretName FoundationType = "secretName"
+	// TypeEmail is local@domain, the domain a TypeDomain that is no RFC 2606 example or test name, so a chart's
+	// placeholder contact can never pass.
+	TypeEmail FoundationType = "email"
 )
 
 // FoundationGroup is the Stage 3 panel a foundation is asked in.
@@ -67,12 +70,15 @@ const (
 	FnJoin Fn = "join"
 	// FnCopy takes the one answer its template arg names, keeping the answer's type.
 	FnCopy Fn = "copy"
-	// FnConst writes its one scalar arg verbatim; only inside an owned list.
+	// FnConst writes its one scalar arg verbatim; only inside an owned list, with requires or with When.
 	FnConst Fn = "const"
 )
 
 // maxHostnameLength is the DNS limit on a full host name.
 const maxHostnameLength = 253
+
+// maxEmailLocalLength is RFC 5321's limit on the local part of a mailbox.
+const maxEmailLocalLength = 64
 
 const (
 	// maxURLLength caps a url answer at the length browsers and proxies reliably accept.
@@ -89,7 +95,14 @@ const (
 var urlSchemes = []string{"http", "https"}
 
 var (
-	knownTypes = []FoundationType{TypeString, TypeHostname, TypeDomain, TypeChoice, TypeDID, TypeURL, TypeBool, TypeCredentialTypes, TypeSecretName}
+	// reservedMailDomains are RFC 2606's example second-level domains; their subdomains are refused too.
+	reservedMailDomains = []string{"example.com", "example.net", "example.org"}
+	// reservedMailTLDs are RFC 2606's reserved top-level names.
+	reservedMailTLDs = []string{"example", "test", "invalid", "localhost"}
+)
+
+var (
+	knownTypes = []FoundationType{TypeString, TypeHostname, TypeDomain, TypeChoice, TypeDID, TypeURL, TypeBool, TypeCredentialTypes, TypeSecretName, TypeEmail}
 	knownFns   = []Fn{FnTpl, FnJoin, FnCopy, FnConst}
 	// knownFoundationGroups are the Stage 3 panels, in screen order.
 	knownFoundationGroups = []FoundationGroup{GroupOrganization, GroupDataspace, GroupNetwork, GroupPlatform, GroupEgress}
@@ -103,6 +116,8 @@ var (
 	did = regexp.MustCompile(`^did:[a-z0-9]+:(?:` + didIDChar + `*:)*` + didIDChar + `+$`)
 	// credentialType is the name of a verifiable credential type, such as UserCredential.
 	credentialType = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9._-]*$`)
+	// emailLocal is a dot-atom local part without the characters a chart template would have to escape.
+	emailLocal = regexp.MustCompile(`^[A-Za-z0-9_%+-]+(\.[A-Za-z0-9_%+-]+)*$`)
 )
 
 // Reserved refs seeded from the Stage 1 target besides FieldTargetEnvironment (ADR 0025).
@@ -155,6 +170,18 @@ func (c Condition) Holds(answers map[string]any) bool {
 	if c.Set {
 		return ok
 	}
+	return ok && v == any(c.Equals)
+}
+
+// TargetCondition holds while the resolved answer ID equals Equals; an unset answer never holds (ADR 0026).
+type TargetCondition struct {
+	ID     string `json:"id"`
+	Equals string `json:"equals"`
+}
+
+// Holds reports whether c holds over the resolved answers.
+func (c TargetCondition) Holds(answers map[string]any) bool {
+	v, ok := answers[c.ID]
 	return ok && v == any(c.Equals)
 }
 
@@ -278,7 +305,11 @@ type CompiledTarget struct {
 	Requires []string
 	// Mechanism is withheld as a whole when one of its elements collides with a foreign one; empty for none.
 	Mechanism string
-	tpls      []*template.Template
+	// When must all hold for the target to render; nil for a declared foundation's target (ADR 0026).
+	When []TargetCondition
+	// Replaces writes over the unconditional target at the same path, which then does not render.
+	Replaces bool
+	tpls     []*template.Template
 }
 
 // Templates are the parsed args of a tpl, join or copy target, in order; nil for const.
@@ -286,7 +317,26 @@ func (t CompiledTarget) Templates() []*template.Template {
 	return t.tpls
 }
 
-// Foundation returns the compiled foundation id; false when the bundle does not declare it.
+// unconditional reports whether t renders whatever the answers' values: no When, Only or Replaces, and a plain leaf.
+func (t CompiledTarget) unconditional() bool {
+	return len(t.When) == 0 && t.Only == "" && !t.Replaces && t.Element == nil && t.Each == nil
+}
+
+// conditions are t's When plus its Only, a condition on owner, the id of the foundation that writes it.
+func (t CompiledTarget) conditions(owner string) []TargetCondition {
+	cs := slices.Clone(t.When)
+	if t.Only != "" {
+		cs = append(cs, TargetCondition{ID: owner, Equals: t.Only})
+	}
+	return cs
+}
+
+// CompiledFoundations returns the declared foundations and the synthetic infra.* ones, compiled, in bundle order.
+func (b Bundle) CompiledFoundations() []CompiledFoundation {
+	return slices.Clone(b.foundations)
+}
+
+// Foundation returns the compiled foundation id, synthetic ones included; false when the bundle has none.
 func (b Bundle) Foundation(id string) (CompiledFoundation, bool) {
 	i := slices.IndexFunc(b.foundations, func(f CompiledFoundation) bool { return f.ID == id })
 	if i < 0 {
@@ -339,6 +389,8 @@ func (t FoundationType) Check(v any) error {
 		}
 	case TypeURL:
 		return checkURL(s)
+	case TypeEmail:
+		return checkEmail(s)
 	case TypeChoice:
 		return fmt.Errorf("a %s is checked against its foundation's options", t)
 	default:
@@ -363,6 +415,23 @@ func checkURL(s string) error {
 	u, err := url.Parse(s)
 	if err != nil || !slices.Contains(urlSchemes, u.Scheme) || u.Hostname() == "" || u.User != nil {
 		return errors.New(want)
+	}
+	return nil
+}
+
+func checkEmail(s string) error {
+	local, domain, ok := strings.Cut(s, "@")
+	if !ok || len(local) > maxEmailLocalLength || !emailLocal.MatchString(local) {
+		return fmt.Errorf("must be an e-mail address local@domain, the local part at most %d letters, digits and '.', '_', '%%', '+', '-'", maxEmailLocalLength)
+	}
+	if TypeDomain.Check(domain) != nil {
+		return fmt.Errorf("must be an e-mail address whose domain has at least two labels of lowercase letters, digits and '-'")
+	}
+	labels := strings.Split(domain, idSeparator)
+	reserved := slices.Contains(reservedMailTLDs, labels[len(labels)-1]) ||
+		slices.ContainsFunc(reservedMailDomains, func(d string) bool { return domain == d || strings.HasSuffix(domain, idSeparator+d) })
+	if reserved {
+		return fmt.Errorf("must not use an RFC 2606 example or test domain, which no mail reaches")
 	}
 	return nil
 }
@@ -535,7 +604,7 @@ func compileFoundation(f Foundation, topLevelKeys []string) (CompiledFoundation,
 	}
 	c.Refs = sortedSet(refs)
 	for i, t := range f.Targets {
-		ct, err := compileTarget(f.ID, t, topLevelKeys)
+		ct, err := compileTarget(f.ID, t, nil, topLevelKeys)
 		if err != nil {
 			return CompiledFoundation{}, fmt.Errorf("targets[%d]: %w", i, err)
 		}
@@ -600,7 +669,8 @@ func checkID(id string) error {
 	return nil
 }
 
-func compileTarget(id string, t Target, topLevelKeys []string) (CompiledTarget, error) {
+// compileTarget compiles t, written by foundation id while every condition of when holds.
+func compileTarget(id string, t Target, when []TargetCondition, topLevelKeys []string) (CompiledTarget, error) {
 	p, err := roundtrip.ParsePath(t.Path)
 	if err != nil {
 		return CompiledTarget{}, err
@@ -611,7 +681,7 @@ func compileTarget(id string, t Target, topLevelKeys []string) (CompiledTarget, 
 	if k, ok := p[0].Key(); !ok || !slices.Contains(topLevelKeys, k) {
 		return CompiledTarget{}, fmt.Errorf("path %q: root is not in topLevelKeys", t.Path)
 	}
-	c := CompiledTarget{Path: p, Fn: t.Fn, Sep: t.Sep, Mechanism: t.Mechanism}
+	c := CompiledTarget{Path: p, Fn: t.Fn, Sep: t.Sep, Mechanism: t.Mechanism, When: slices.Clone(when)}
 	if t.Sep != "" && t.Fn != FnJoin {
 		return CompiledTarget{}, fmt.Errorf("sep is only allowed on %s targets", FnJoin)
 	}
@@ -633,8 +703,8 @@ func compileTarget(id string, t Target, topLevelKeys []string) (CompiledTarget, 
 	}
 	switch t.Fn {
 	case FnConst:
-		if len(c.Requires) == 0 && !slices.ContainsFunc(p, func(s roundtrip.Segment) bool { _, ok := s.Index(); return ok }) {
-			return CompiledTarget{}, fmt.Errorf("%s is only allowed under a list index, which completes an owned list, or with requires", FnConst)
+		if len(c.Requires) == 0 && len(c.When) == 0 && !slices.ContainsFunc(p, func(s roundtrip.Segment) bool { _, ok := s.Index(); return ok }) {
+			return CompiledTarget{}, fmt.Errorf("%s is only allowed under a list index, which completes an owned list, under a mode condition, or with requires", FnConst)
 		}
 		if len(t.Args) != 1 || !isScalar(t.Args[0]) {
 			return CompiledTarget{}, fmt.Errorf("%s takes exactly one scalar arg", FnConst)
@@ -881,17 +951,27 @@ func checkRefs(fs []CompiledFoundation) error {
 					return err
 				}
 			}
+			for _, c := range t.When {
+				if err := check(i, fmt.Sprintf("targets[%d] when", j), c.ID, true); err != nil {
+					return err
+				}
+				if o, _ := find(c.ID); o.Type == TypeChoice && !slices.Contains(o.optionValues(), c.Equals) {
+					return fmt.Errorf("foundations[%d] (%s): targets[%d] when: %q is not an option of %s", i, f.ID, j, c.Equals, c.ID)
+				}
+			}
 		}
 	}
 	return nil
 }
 
-// checkTargetPaths refuses a path written twice (unless by one foundation for distinct non-empty Only values), a
-// path that is a prefix of another (every leaf is a scalar), a prefix used both as a list and as a mapping, a
-// list whose indices are not 0..n-1, a list both indexed and written per element, and overlapping each paths.
+// checkTargetPaths refuses a path written twice, unless the two targets are exclusive (both condition one id on
+// distinct values, Only being a condition on the target's own foundation) or one replaces the other, unconditional
+// one; a replacing target without an unconditional one; a path that is a prefix of another (every leaf is a scalar),
+// a prefix used both as a list and as a mapping, a list whose indices are not 0..n-1, a list both indexed and
+// written per element, and overlapping each paths.
 func checkTargetPaths(fs []CompiledFoundation) error {
 	type where struct{ f, t int }
-	// leaves lists every target writing a path; only one foundation's targets with distinct Only values share one.
+	// leaves lists every target writing a path; only exclusive or replacing targets share one.
 	leaves := map[string][]where{}
 	// interior maps every proper prefix to whether its child segment is an index.
 	interior := map[string]bool{}
@@ -942,13 +1022,19 @@ func checkTargetPaths(fs []CompiledFoundation) error {
 				continue
 			}
 			if k := slices.IndexFunc(leaves[key], func(w where) bool {
-				only := fs[w.f].Targets[w.t].Only
-				return w.f != i || t.Only == "" || only == "" || only == t.Only
+				return !mayShare(fs[w.f].ID, fs[w.f].Targets[w.t], f.ID, t)
 			}); k >= 0 {
 				w := leaves[key][k]
 				return fmt.Errorf("foundations[%d] (%s): targets[%d]: path %q is already written by foundations[%d] targets[%d]", i, f.ID, j, key, w.f, w.t)
 			}
 			leaves[key] = append(leaves[key], where{i, j})
+		}
+	}
+	for i, f := range fs {
+		for j, t := range f.Targets {
+			if t.Replaces && !slices.ContainsFunc(leaves[t.Path.String()], func(w where) bool { return fs[w.f].Targets[w.t].unconditional() }) {
+				return fmt.Errorf("foundations[%d] (%s): targets[%d]: path %q replaces no unconditional foundation target", i, f.ID, j, t.Path)
+			}
 		}
 	}
 	for key, ws := range leaves {
@@ -968,6 +1054,18 @@ func checkTargetPaths(fs []CompiledFoundation) error {
 		}
 	}
 	return nil
+}
+
+// mayShare reports whether target a of foundation fa and target b of fb may write one leaf: one replaces the other,
+// unconditional one, or both condition one id on distinct values, so they never render together.
+func mayShare(fa string, a CompiledTarget, fb string, b CompiledTarget) bool {
+	if (a.Replaces && b.unconditional()) || (b.Replaces && a.unconditional()) {
+		return true
+	}
+	ca := a.conditions(fa)
+	return slices.ContainsFunc(b.conditions(fb), func(d TargetCondition) bool {
+		return slices.ContainsFunc(ca, func(c TargetCondition) bool { return c.ID == d.ID && c.Equals != d.Equals })
+	})
 }
 
 // hasPathPrefix reports whether q is a segment prefix of p, or equal to it.
