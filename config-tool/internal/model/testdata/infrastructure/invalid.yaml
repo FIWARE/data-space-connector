@@ -150,8 +150,20 @@
             questions:
               - {id: kind, type: choice, label: Kind, options: [{value: plain, label: Plain}]}
               - {id: port, type: string, label: Port, when: {question: kind, equals: managed}}
-- name: question when on a bool question
-  err: 'when: infra.db.tls is a bool; a condition compares a string answer'
+- name: question when on a bool question, gated question without targets
+  err: 'questions[1] (port): when: tls is a bool; a condition compares a string answer'
+  override:
+    infrastructure:
+      - id: db
+        title: DB
+        modes:
+          - id: external
+            label: External
+            questions:
+              - {id: tls, type: bool, label: TLS}
+              - {id: port, type: string, label: Port, when: {question: tls, equals: "true"}}
+- name: question when on a bool question, gated question with targets
+  err: 'questions[1] (port): when: tls is a bool; a condition compares a string answer'
   override:
     infrastructure:
       - id: db

@@ -417,6 +417,8 @@ func compileQuestion(dep string, m Mode, q Question, when []TargetCondition, top
 			return CompiledFoundation{}, fmt.Errorf("when: a question cannot depend on itself")
 		case w.Equals == "":
 			return CompiledFoundation{}, fmt.Errorf("when: equals is missing")
+		case !m.Questions[k].Type.IsString():
+			return CompiledFoundation{}, fmt.Errorf("when: %s is a %s; a condition compares a string answer", w.Question, m.Questions[k].Type)
 		case m.Questions[k].Type == TypeChoice && !slices.ContainsFunc(m.Questions[k].Options, func(o Option) bool { return o.Value == w.Equals }):
 			return CompiledFoundation{}, fmt.Errorf("when: %q is not an option of %s", w.Equals, w.Question)
 		}

@@ -59,7 +59,8 @@ A top-level `const` target used to need `requires`, because an ungated constant 
 is a gate too, so mode targets are plain `const` targets. An unconditioned top-level `const` is still refused.
 
 A condition compares a string, so it may only name a string-typed answer (a choice, string, hostname, ...); a `when` on a
-`bool` or `credentialTypes` answer is a compile error, because it could never hold.
+`bool` or `credentialTypes` answer is a compile error, because it could never hold. A question `when` is checked on its
+own, so a gated question without targets is refused too.
 
 Requirement rows (Secrets listed for NEXT_STEPS.md) get the same `When` gating and an optional `keys` list (exactly one
 of `key`/`keys`). In `external`, each per-ingress Secret is listed once, with keys `tls.crt` and `tls.key`, and only
