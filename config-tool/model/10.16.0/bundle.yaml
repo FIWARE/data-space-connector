@@ -1241,7 +1241,9 @@ foundations:
         requires: [ca.privateSecret]
       # Its Micronaut and java.net.http clients use the JVM default trust store. The init container copies the JDK's
       # cacerts (password changeit, the JDK default) and adds every certificate of ca.crt: keytool imports only the
-      # first certificate of a PEM file. The image is the chart's own; internal/render/ca_test.go pins it.
+      # first certificate of a PEM file. The image is the chart's own; internal/render/ca_test.go pins it. The script
+      # starts from an empty store, because the kubelet reruns init containers on a kept emptyDir and keytool refuses an
+      # existing alias.
       - path: contract-management.deployment.additionalVolumes
         mechanism: contract-management-ca
         element: {key: private-ca, value: {secret: {secretName: "{{ .ca.privateSecret }}", items: [{key: ca.crt, path: ca.crt}]}}}
@@ -1260,6 +1262,7 @@ foundations:
               - -c
               - |
                 set -e
+                rm -f /ca-store/cacerts /ca-store/private-ca-*.pem
                 keytool -importkeystore -noprompt -srckeystore "$JAVA_HOME/lib/security/cacerts" -srcstorepass changeit -destkeystore /ca-store/cacerts -deststoretype PKCS12 -deststorepass changeit
                 awk '/-BEGIN CERTIFICATE-/ {n++; p=1} p {print > ("/ca-store/private-ca-" n ".pem")} /-END CERTIFICATE-/ {p=0}' /private-ca/ca.crt
                 for f in /ca-store/private-ca-*.pem; do keytool -importcert -noprompt -keystore /ca-store/cacerts -storetype PKCS12 -storepass changeit -alias "$(basename "$f" .pem)" -file "$f"; rm "$f"; done

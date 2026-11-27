@@ -226,7 +226,9 @@ kind (`mechanism: none`) is gone. Checked against contract-management 3.6.3 and 
   (the Contract Management image, which ships `keytool` and `awk`) copies `$JAVA_HOME/lib/security/cacerts` into a
   PKCS12 store in the `ca-store` emptyDir (password `changeit`, the JDK default, not a secret), splits `ca.crt` with
   `awk` and imports every certificate. Run as user 185 with a read-only root file system and no capabilities, a
-  two-certificate `ca.crt` yields 148 public roots plus `private-ca-1` and `private-ca-2`.
+  two-certificate `ca.crt` yields 148 public roots plus `private-ca-1` and `private-ca-2`. The script first deletes
+  the store: the kubelet reruns init containers when it recreates a pod sandbox, the emptyDir survives, and
+  `keytool -importcert` fails on an existing alias. `TestContractManagementInitRerun` runs it twice.
 
 The main container mounts `ca-store` read-only at `/ca-store`, outside the chart's own `/application.yaml` mount.
 

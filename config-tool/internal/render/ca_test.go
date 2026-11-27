@@ -3,6 +3,7 @@ package render
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -177,6 +178,75 @@ func TestContractManagementInit(t *testing.T) {
 	cmd, _ := init["command"].([]any)
 	if len(cmd) != 3 || !strings.Contains(fmt.Sprint(cmd[2]), caStore+"/cacerts") {
 		t.Errorf("command = %#v, want a script writing %s/cacerts", cmd, caStore)
+	}
+}
+
+// stubKeytool mimics the two keytool calls of add-private-ca on a text store of one alias per line: -importkeystore
+// adds the public roots and keeps existing aliases, -importcert refuses an alias that already exists.
+const stubKeytool = `#!/bin/sh
+store= alias= mode=
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -importkeystore) mode=store ;;
+    -importcert) mode=cert ;;
+    -destkeystore|-keystore) store="$2"; shift ;;
+    -alias) alias="$2"; shift ;;
+  esac
+  shift
+done
+if [ "$mode" = store ]; then
+  grep -qx public "$store" 2>/dev/null || echo public >> "$store"
+  exit 0
+fi
+if grep -qx "$alias" "$store"; then echo "Certificate not imported, alias <$alias> already exists" >&2; exit 1; fi
+echo "$alias" >> "$store"
+`
+
+// TestContractManagementInitRerun runs the add-private-ca script twice on the same store, as the kubelet does when it
+// recreates a pod sandbox and the emptyDir survives.
+func TestContractManagementInitRerun(t *testing.T) {
+	for _, tool := range []string{"sh", "awk", "grep"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			t.Skipf("%s not available: %v", tool, err)
+		}
+	}
+	tree := renderShipped(t, map[string]any{caSecretID: privateCASecret}, "")
+	init, _ := at(t, tree, contractDeploy+".initContainers[0]").(map[string]any)
+	cmd, _ := init["command"].([]any)
+	if len(cmd) != 3 {
+		t.Fatalf("command = %#v, want sh -c <script>", cmd)
+	}
+	dir := t.TempDir()
+	store, secret, bin := filepath.Join(dir, "ca-store"), filepath.Join(dir, "private-ca"), filepath.Join(dir, "bin")
+	for _, d := range []string{store, secret, bin} {
+		if err := os.Mkdir(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pem := "-----BEGIN CERTIFICATE-----\nA\n-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----\nB\n-----END CERTIFICATE-----\n"
+	if err := os.WriteFile(filepath.Join(secret, "ca.crt"), []byte(pem), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bin, "keytool"), []byte(stubKeytool), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script := strings.NewReplacer(caStore, store, "/private-ca/", secret+"/").Replace(fmt.Sprint(cmd[2]))
+	for run := 1; run <= 2; run++ {
+		c := exec.Command("sh", "-c", script)
+		c.Env = append(os.Environ(), "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"), "JAVA_HOME="+dir)
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("run %d: %v\n%s", run, err, out)
+		}
+	}
+	got, err := os.ReadFile(filepath.Join(store, "cacerts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "public\nprivate-ca-1\nprivate-ca-2\n"; string(got) != want {
+		t.Errorf("store after two runs = %q, want %q", got, want)
+	}
+	if left, _ := filepath.Glob(filepath.Join(store, "*.pem")); len(left) > 0 {
+		t.Errorf("leftover split certificates: %v", left)
 	}
 }
 
