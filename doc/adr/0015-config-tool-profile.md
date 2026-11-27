@@ -236,6 +236,28 @@ empty instead of preselecting latest, so a version the user chose is never repla
 The reverse holds too: a chart change on Stage 1 clears `role`, `features` and `catalogue` and
 tells the user why, since every role belongs to exactly one chart.
 
+### 8. Infrastructure
+
+Stage 4 answers (ADR [0026](0026-config-tool-infrastructure-modes.md)) sit in an optional key, so
+the format stays `1`:
+
+```yaml
+infrastructure:
+  certManager:
+    mode: cluster
+    answers:
+      issuer: letsencrypt
+```
+
+Answers are keyed by local question id; a per-ingress question is `<question>.<ingressId>`. Field
+ids are `infrastructure.<dep>` for the mode and `infrastructure.<dep>.<question>` for an answer,
+both in `FieldError`s and in `open`. `Validate` refuses an unknown dependency, a mode it does not
+offer, a question none of its modes declares and a value the question's type refuses. The
+compiled `infra.*` ids are never answers of their own: `answers.infra.*` is refused, as an answer
+and as an open field. Answers of inactive modes stay, so switching back restores them; only the
+active mode renders. A chart switch drops the whole map and its open questions. Like every other
+answer, an infrastructure answer names a Secret or an issuer, never a credential.
+
 ### API
 
 All three routes sit behind the per-run token and the 8 MiB body cap. Errors use the existing

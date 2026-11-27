@@ -429,6 +429,8 @@ func TestRecognizedFoundationValidation(t *testing.T) {
 			"only a toggle rule reads"},
 		{"list", "{path: keycloak.types, answer: dataspace.credentialTypes, stage: foundations, kind: value}",
 			"which a single leaf cannot answer"},
+		{"infrastructure answer", "{path: keycloak.issuer, answer: infra.certManager.issuer, stage: infrastructure, kind: value}",
+			`answer "infra.certManager.issuer" lies under infra.`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

@@ -1,0 +1,39 @@
+# A bundle with one three-mode dependency over one ingress, for the profile's infrastructure map.
+chart: data-space-connector
+version: 10.16.0
+revision: 1
+topLevelKeys: [keycloak, cert-manager]
+foundations:
+  - id: host.keycloak
+    stage: foundations
+    type: hostname
+    label: Keycloak host
+    targets:
+      - {path: 'keycloak.ingress.tls[0].secretName', fn: tpl, args: ["{{ .host.keycloak }}-tls"]}
+ingresses:
+  - {id: keycloak, label: Keycloak, path: keycloak.ingress, owner: host.keycloak}
+infrastructure:
+  - id: certManager
+    title: TLS certificates (cert-manager)
+    modes:
+      - id: bundled
+        label: Install cert-manager with the connector
+        targets: [{path: cert-manager.enabled, fn: const, args: [true]}]
+        questions:
+          - id: type
+            type: choice
+            label: Issuer
+            default: selfsigned
+            options:
+              - {value: selfsigned, label: Self-signed}
+              - {value: prod, label: "Let's Encrypt"}
+          - {id: acmeEmail, type: email, label: ACME contact, when: {question: type, equals: prod}}
+      - id: cluster
+        label: Use the cert-manager already in the cluster
+        targets: [{path: cert-manager.enabled, fn: const, args: [false]}]
+        questions:
+          - {id: issuer, type: hostname, label: ClusterIssuer}
+      - id: external
+        label: I provide a TLS Secret per host
+        targets: [{path: cert-manager.enabled, fn: const, args: [false]}]
+        perIngressQuestion: {id: secret, type: secretName, label: TLS Secret, key: 'tls[0].secretName', replaces: true}
