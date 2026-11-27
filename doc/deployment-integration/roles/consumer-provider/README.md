@@ -4,7 +4,9 @@
 
 In most real-world data spaces, organizations act as **both consumer and provider simultaneously**. They offer their own data or services to the data space while also consuming data from other participants. This is the most common deployment scenario.
 
-> **Important:** To deploy as both consumer and provider, you must follow **both** the [Consumer guide](../consumer/README.md) and the [Provider guide](../provider/README.md). Each guide covers the components, configuration, and deployment steps for its respective role. This document only provides additional recommendations specific to the combined scenario.
+!!! important
+
+    To deploy as both consumer and provider, you must follow **both** the [Consumer guide](../consumer/README.md) and the [Provider guide](../provider/README.md). Each guide covers the components, configuration, and deployment steps for its respective role. This document only provides additional recommendations specific to the combined scenario.
 
 ## Recommendations
 

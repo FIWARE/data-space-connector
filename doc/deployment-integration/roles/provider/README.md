@@ -25,7 +25,9 @@ Check also that the cluster meets the [Cluster Prerequisites](../PREREQUISITES.m
 
 ## Required components
 
-> **Note:** The data services that the provider wants to expose through the FIWARE Data Space Connector (APIs, web applications, etc.) are not included in this list. These are external to the connector and must be deployed and managed independently.
+!!! note
+
+    The data services that the provider wants to expose through the FIWARE Data Space Connector (APIs, web applications, etc.) are not included in this list. These are external to the connector and must be deployed and managed independently.
 
 ### Everything from the Consumer role
 
@@ -34,7 +36,9 @@ The provider needs the same base components as a consumer:
 - **DID Helper** — publishes the provider's DID document
 - **PostgreSQL** — database for Keycloak and the IAM components: an existing one, or one the chart deploys (see [Databases](#databases))
 
-> **Note:** If the data space uses the [Decentralized Claims Protocol (DCP)](https://eclipse-dataspace-dcp.github.io/decentralized-claims-protocol/v1.0.1/) (typically together with the [Dataspace Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol) via [FDSC-EDC](#fdsc-edc-dataspace-protocol)), the **DID Helper is replaced by the Identity Hub**, which serves the DID document (and the provider's credentials) as required by DCP. See the [Dataspace Protocol Integration Guide](../../../DSP_INTEGRATION.md) for details.
+!!! note
+
+    If the data space uses the [Decentralized Claims Protocol (DCP)](https://eclipse-dataspace-dcp.github.io/decentralized-claims-protocol/v1.0.1/) (typically together with the [Dataspace Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol) via [FDSC-EDC](#fdsc-edc-dataspace-protocol)), the **DID Helper is replaced by the Identity Hub**, which serves the DID document (and the provider's credentials) as required by DCP. See the [Dataspace Protocol Integration Guide](../../../DSP_INTEGRATION.md) for details.
 
 ### Authentication: Verifiable Credential verification
 
@@ -113,7 +117,7 @@ scorpio:
       key: password
 ```
 
-Scorpio needs the PostGIS extension in its database; the examples in [`k3s/`](../../../../k3s) create it, as a database named `ngb`, through the operator's `preparedDatabases`. The Identity Hub and the status list server, when enabled, take their database settings under `identityhub.postgresql` and `statusListServer.postgresql`.
+Scorpio needs the PostGIS extension in its database; the examples in [`k3s/`](https://github.com/FIWARE/data-space-connector/tree/main/k3s) create it, as a database named `ngb`, through the operator's `preparedDatabases`. The Identity Hub and the status list server, when enabled, take their database settings under `identityhub.postgresql` and `statusListServer.postgresql`.
 
 The Trusted Issuers List and the Credentials Config Service apply their database migrations at startup - on the first start, and after an upgrade that brings new ones - holding a lock in the `databasechangeloglock` table of their database while they do. If the pod is killed in the middle of the migrations (out of memory, a failed node, a pod deleted during an upgrade), the lock stays set, and the next start logs `Waiting for changelog lock....` and never completes. Release the lock in that database: the waiting pod then takes it and applies the remaining migrations. Do it only while no other pod of the service is applying them. With the chart's PostgreSQL, whose databases are `tildb` and `ccsdb`:
 
@@ -126,7 +130,9 @@ kubectl exec -n <namespace> postgres-0 -- psql -U postgres -d tildb \
 
 All optional components listed below can be deployed using the `fiware/data-space-connector` Helm chart. Some of them - Scorpio, the TMForum API and Contract Management - are **enabled by default**; set them to `false` explicitly if you do not need them. The [values example](#using-the-fiware-dsc-helm-chart-and-values) below lists the default of each one.
 
-> **Note on Scorpio Context Broker:** The FIWARE implementation of the [TMForum APIs](https://github.com/FIWARE/tmforum-api) is based on [NGSI-LD](https://www.etsi.org/deliver/etsi_gs/CIM/001_099/009/01.08.01_60/gs_CIM009v010801p.pdf), which is why the `fiware/data-space-connector` Helm chart deploys a [Scorpio Context Broker](https://github.com/ScorpioBroker/ScorpioBroker) as its backend. In the provided examples, this same Scorpio instance is also used as the NGSI-LD endpoint that the provider exposes through the connector. However, **in production**, if you want to expose an NGSI-LD endpoint as a data service, you should deploy a **separate Context Broker** for that purpose and not reuse the Scorpio instance that backs the TMForum APIs.
+!!! note "Note on Scorpio Context Broker"
+
+    The FIWARE implementation of the [TMForum APIs](https://github.com/FIWARE/tmforum-api) is based on [NGSI-LD](https://www.etsi.org/deliver/etsi_gs/CIM/001_099/009/01.08.01_60/gs_CIM009v010801p.pdf), which is why the `fiware/data-space-connector` Helm chart deploys a [Scorpio Context Broker](https://github.com/ScorpioBroker/ScorpioBroker) as its backend. In the provided examples, this same Scorpio instance is also used as the NGSI-LD endpoint that the provider exposes through the connector. However, **in production**, if you want to expose an NGSI-LD endpoint as a data service, you should deploy a **separate Context Broker** for that purpose and not reuse the Scorpio instance that backs the TMForum APIs.
 
 ### TMForum API
 
@@ -138,14 +144,18 @@ The [TMForum API](https://github.com/FIWARE/tmforum-api) implements standardized
 
 ### Contract Management
 
-The [Contract Management](https://github.com/FIWARE/contract-management) component automates access control based on product orders. When a consumer purchases a product offering via the TMForum API, Contract Management reacts to the order and, most importantly, **registers the consumer's DID in the provider's local Trusted Issuers List**, so the consumer's credentials are accepted at the provider when accessing the purchased service. The credential types granted to the consumer are taken from the ordered product. Additionally, if the [ODRL-PAP](https://github.com/SEAMWARE/odrl-pap) is deployed, Contract Management also creates the ODRL access policies that encode the contract terms. Enable this when:
+The [Contract Management](https://github.com/FIWARE/contract-management) component automates access control based on product orders. When a consumer purchases a product offering via the TMForum API, Contract Management reacts to the order and **registers the consumer's DID in the provider's local Trusted Issuers List**, so the consumer's credentials are accepted at the provider when accessing the purchased service. The credential types granted to the consumer are taken from the ordered product. Additionally, if the [ODRL-PAP](https://github.com/SEAMWARE/odrl-pap) is deployed, Contract Management also creates the ODRL access policies that encode the contract terms. Enable this when:
 - You use TMForum APIs for product ordering
 - Access should be granted/revoked automatically based on contracts
 - You need audit trails for data access agreements
 
-> **Note:** If the data space uses a [central marketplace](../../../CENTRAL_MARKETPLACE.md), the Contract Management component requires specific configuration to work with it. See the [Central Marketplace documentation](../../../CENTRAL_MARKETPLACE.md) for details on how to configure Contract Management in that scenario.
+!!! note
 
-> **Note:** The policies and the credential configuration are read from the ordered `ProductSpecification` by default. A product can instead be composed of `ServiceSpecification`s that carry their own policies - an access policy protects an API, and in TMForum an API is a `ServiceSpecification`. See [Authoring a composed ProductSpecification](./COMPOSED_SPECIFICATIONS.md).
+    If the data space uses a [central marketplace](../../../CENTRAL_MARKETPLACE.md), the Contract Management component requires specific configuration to work with it. See the [Central Marketplace documentation](../../../CENTRAL_MARKETPLACE.md) for details on how to configure Contract Management in that scenario.
+
+!!! note
+
+    The policies and the credential configuration are read from the ordered `ProductSpecification` by default. A product can instead be composed of `ServiceSpecification`s that carry their own policies - an access policy protects an API, and in TMForum an API is a `ServiceSpecification`. See [Authoring a composed ProductSpecification](./COMPOSED_SPECIFICATIONS.md).
 
 ### Marketplace (BAE)
 
@@ -158,20 +168,25 @@ Enable the local marketplace when:
 - You want a user-facing web interface for your own data marketplace
 - Consumers should be able to browse and order offerings through a portal hosted by the provider
 
-> **Note:** The local Marketplace requires MongoDB in addition to the existing PostgreSQL, deployed by the chart through the MongoDB Community Operator. [Running a local marketplace](./LOCAL_MARKETPLACE.md) covers the whole setup: the operator, the values, the login with Verifiable Credentials and the security considerations.
+!!! note
 
-> **Note:** To create **DSP-compatible** products and offerings (i.e. offerings whose data is exchanged over the Dataspace Protocol — see [FDSC-EDC (Dataspace Protocol)](#fdsc-edc-dataspace-protocol)) through the local marketplace UI, the BAE Logic Proxy must be deployed with `BAE_LP_DSP_ENABLED=true`, set under `marketplace.bizEcosystemLogicProxy.additionalEnvVars`. This flag exposes the DSP-specific fields in the offering-creation forms; omit it for a marketplace that only brokers classic FIWARE offerings. See [Using the BAE Marketplace](../../../DSP_INTEGRATION.md#using-the-bae-marketplace) in the DSP Integration documentation.
+    The local Marketplace requires MongoDB in addition to the existing PostgreSQL, deployed by the chart through the MongoDB Community Operator. [Running a local marketplace](./LOCAL_MARKETPLACE.md) covers the whole setup: the operator, the values, the login with Verifiable Credentials and the security considerations.
+
+!!! note
+
+    To create **DSP-compatible** products and offerings (i.e. offerings whose data is exchanged over the Dataspace Protocol — see [FDSC-EDC (Dataspace Protocol)](#fdsc-edc-dataspace-protocol)) through the local marketplace UI, the BAE Logic Proxy must be deployed with `BAE_LP_DSP_ENABLED=true`, set under `marketplace.bizEcosystemLogicProxy.additionalEnvVars`. This flag exposes the DSP-specific fields in the offering-creation forms; omit it for a marketplace that only brokers classic FIWARE offerings. See [Using the BAE Marketplace](../../../DSP_INTEGRATION.md#using-the-bae-marketplace) in the DSP Integration documentation.
 
 #### Participating in a Central Marketplace
 
 If the data space runs a shared [Central Marketplace](../../../CENTRAL_MARKETPLACE.md) hosted by another actor (typically the Data Space Operator), the provider publishes its offerings there and does **not** deploy the marketplace itself. However, the provider's DSC needs specific configuration so the Central Marketplace can reach the local Contract Management and trigger the activation flow after each purchase.
 
-> **Minimum versions**
-> - `fiware/data-space-connector` Helm chart ≥ **9.0.1**
-> - `fiware/contract-management` Helm chart ≥ **3.5.22**
-> - `contract-management` container image ≥ **3.3.8**
+!!! note "Minimum versions"
 
-The following configuration is required on the provider side. The example in [`k3s/provider.yaml`](../../../../k3s/provider.yaml) already includes all of the pieces below and can be used as a reference.
+    - `fiware/data-space-connector` Helm chart ≥ **9.0.1**
+    - `fiware/contract-management` Helm chart ≥ **3.5.22**
+    - `contract-management` container image ≥ **3.3.8**
+
+The following configuration is required on the provider side. The example in [`k3s/provider.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider.yaml) already includes all of the pieces below and can be used as a reference.
 
 **1. Enable and configure Contract Management in central-marketplace mode**
 
@@ -290,243 +305,63 @@ Enable the Eclipse Dataspace Components connector for DSP compliance. See [DSP I
 
 ### Using the FIWARE DSC Helm chart and values
 
-> **Start from the reference profile:** [`examples/provider.yaml`](../../../../charts/data-space-connector/examples/provider.yaml), and [`examples/provider-marketplace.yaml`](../../../../charts/data-space-connector/examples/provider-marketplace.yaml) for the provider's own local marketplace (not the Central Marketplace), are complete values files for a provider, to adapt to your installation. Their [README](../../../../charts/data-space-connector/examples/README.md) lists the prerequisites, the placeholders, the Secrets to create and the installation steps. The settings below explain each part.
+!!! note "Start from the reference profile"
+
+    [`examples/provider.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/examples/provider.yaml), and [`examples/provider-marketplace.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/examples/provider-marketplace.yaml) for the provider's own local marketplace (not the Central Marketplace), are complete values files for a provider, to adapt to your installation. Their [README](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/examples/README.md) lists the prerequisites, the placeholders, the Secrets to create and the installation steps. The settings below explain each part.
 
 The provider uses the `fiware/data-space-connector` chart with authentication and authorization components enabled.
 
-1. Create a helm `values.yaml` file with the key settings for a provider deployment:
+Build a `values.yaml` for the provider by adapting [`examples/provider.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/examples/provider.yaml). The sections below show that file piece by piece and explain the key settings; replace every `<placeholder>`.
 
-   The Ingresses in the example only carry the cert-manager annotations and use the cluster's default ingress class unless `className` is set. Add the class and the annotations your ingress controller needs; the [local deployment](../../local-deployment/LOCAL.MD) uses Traefik, for example.
+The ingresses use cert-manager through annotations and the ingress class you set, so adapt them to the controller your cluster runs (the [local deployment](../../local-deployment/LOCAL.md) uses Traefik). A `ClusterIssuer` is a prerequisite: use your own, or let the chart create one with `certManagerResources` (the [examples README](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/examples/README.md) covers the prerequisites, Secrets and placeholders).
 
-   With `certManagerResources.enabled: true` and `type: "prod"`, the chart creates the `prod-issuer` ClusterIssuer referenced below. Replace the `acmeEmail` and `ingressClass` placeholders with your own values. If your cluster already manages its own ClusterIssuer, disable `certManagerResources.enabled` and use that issuer's actual name in the annotations.
+#### Identity: did:web
+
+did-helper serves the organization's `did:web`. Its key is the TLS certificate cert-manager issues for the ingress, and it must never rotate: a new key changes the DID, and every credential issued with the old one stops verifying (hence `private-key-rotation-policy: Never`; see [Identity key lifecycle](#identity-key-lifecycle)). did-helper also publishes that certificate at `/.well-known/tls.crt`, as the `x5u` of the key.
 
 ```yaml
-# Key settings for provider deployment
-
-# Enable cert-manager for prod
-cert-manager:
-  enabled: true
-  crds:
-    enabled: true
-
-certManagerResources:
-  enabled: true
-  type: "prod"
-  acmeEmail: <your-email>              # ACME account contact; the chart's default is a placeholder
-  ingressClass: <your-ingress-class>   # the class that serves the HTTP-01 challenge
-
-# Keycloak — see ../KEYCLOAK.md for detailed configuration
-keycloak:
-
-
-# DID of type web using cert-manager for TLS and for the DID document public key
-did:
-  enabled: true
-  config:
-    server:
-      # https: did-helper also publishes <hostUrl>/.well-known/tls.crt as the x5u of the key
-      hostUrl: "https://<your_did_domain>"
-      certPath: "/certs/tls.crt"
-  volumes:
-    - name: certs
-      secret:
-        # the DID's key, issued by cert-manager for the Ingress below and never rotated: see
-        # "Identity key lifecycle"
-        secretName: <your_did_domain>-tls
-        items:
-          - key: tls.crt
-            path: tls.crt
-  volumeMounts:
-    - name: certs
-      mountPath: /certs
-  # with certPath did-helper writes nothing, so it runs on a read-only root filesystem
-  securityContext:
-    readOnlyRootFilesystem: true
-    allowPrivilegeEscalation: false
-    capabilities:
-      drop: ["ALL"]
-  ingress:
-    enabled: true
-    className: <your-ingress-class>   # add the annotations your ingress controller needs
-    annotations:
-      cert-manager.io/cluster-issuer: "prod-issuer" # Use selfsigned-issuer with the selfsigned setup for testing
-      cert-manager.io/private-key-algorithm: "ECDSA"
-      # the Secret also holds the DID's key: renewals must keep it (cert-manager >= 1.18
-      # generates a new one by default)
-      cert-manager.io/private-key-rotation-policy: "Never"
-      cert-manager.io/common-name: "<your_did_domain>"
-    hosts:
-      - host: <your_did_domain>
-        paths:
-          - path: /
-            pathType: ImplementationSpecific
-    tls:
-      - secretName: <your_did_domain>-tls
-        hosts:
-          - <your_did_domain>
-
-# --- Authentication and Authorization ---
-
-decentralizedIam:
-  enabled: true
-  vcAuthentication:
-    # VCVerifier — verifies incoming Verifiable Credentials via OID4VP
-    vcverifier:
-      ingress:
-        enabled: true
-        annotations:
-          cert-manager.io/cluster-issuer: "prod-issuer"
-          cert-manager.io/private-key-algorithm: "ECDSA"
-          cert-manager.io/common-name: "<your_verifier_domain>"
-        tls:
-          - hosts:
-              - <your_verifier_domain>
-            secretName: <your_verifier_domain>-tls
-        hosts:
-          - host: <your_verifier_domain>
-            paths:
-              - "/"
-      deployment:
-        verifier:
-          tirAddress: <trust_anchor_tir_url>     # Trust Anchor's TIR endpoint
-          did: <your-organization's-DID>
-        server:
-          host: https://<your_verifier_domain>
-      # Services and the credentials they accept, registered at the VCVerifier's configuration
-      # API on install and upgrade. A service that is already registered is left as it is: change
-      # it through that API (`PUT http://verifier:8090/service/<id>`).
-      registration:
-        enabled: true
-        services:
-          - id: data-service                       # ID for the protected service
-            defaultOidcScope: "default"
-            authorizationType: "DEEPLINK"
-            oidcScopes:
-              "default":
-                credentials:
-                  - type: UserCredential           # Accepted credential type
-                    trustedParticipantsLists:
-                      - <trust_anchor_tir_url>     # Trust Anchor's TIR endpoint
-                    trustedIssuersLists:
-                      - http://trusted-issuers-list:8080  # Local TIL
-
-    # Trusted Issuers List — local list of trusted issuers
-    trusted-issuers-list:
-      ingress:
-        til:
-          enabled: true
-          annotations:
-            cert-manager.io/cluster-issuer: "prod-issuer"
-            cert-manager.io/private-key-algorithm: "ECDSA"
-            cert-manager.io/common-name: "<your_til_domain>"
-          hosts:
-            - host: <your_til_domain>
-              paths:
-                - /
-          tls:
-            - secretName: <your_til_domain>-tls
-              hosts:
-                - <your_til_domain>
-
-    # Managed PostgreSQL for IAM components
-    managedPostgres:
-      enabled: true
-      config:
-        volume:
-          storageClass: "" # Use default storage class or specify one if needed
-
-  # --- Authorization: APISIX (PEP) + OPA (PDP) + ODRL-PAP ---
-  odrlAuthorization:
-    apisix:
-      apisix:
-        admin:
-          credentials:
-            admin: <your_apisix_admin_password>    # Change from default!
-      ingress:
-        enabled: true
-        annotations:
-          cert-manager.io/cluster-issuer: "prod-issuer"
-          cert-manager.io/private-key-algorithm: "ECDSA"
-        hosts:
-          - host: <your_data_service_domain>       # Domain for the protected data service
-            paths: ["/"]
-        tls:
-          - secretName: <your_apisix_tls_secret>
-            hosts:
-              - <your_data_service_domain>
-      routes:
-        # Route: OpenID Configuration for the data service (VCVerifier)
-        - uri: /.well-known/openid-configuration
-          host: <your_data_service_domain>
-          upstream:
-            nodes:
-              verifier:3000: 1
-            type: roundrobin
-          plugins:
-            proxy-rewrite:
-              uri: /services/data-service/.well-known/openid-configuration
-        # Route: Data service requests (authenticated + authorized)
-        - uri: /*
-          host: <your_data_service_domain>
-          upstream:
-            nodes:
-              <your_backend_service>: 1            # Upstream to your actual data service
-            type: roundrobin
-          plugins:
-            openid-connect:
-              bearer_only: true
-              use_jwks: true
-              client_id: data-service
-              client_secret: unused
-              ssl_verify: true            # see "Trusting a private CA" below if your certificates are not publicly trusted
-              discovery: https://<your_verifier_domain>/services/data-service/.well-known/openid-configuration
-            opa:
-              host: http://localhost:8181
-              policy: policy/main
-
-    # ODRL-PAP — Policy Administration Point
-    odrl-pap:
-      additionalEnvVars:
-        - name: GENERAL_ORGANIZATION_DID
-          value: <your-organization's-DID>
-      ingress:
-        enabled: true
-        annotations:
-          cert-manager.io/cluster-issuer: "prod-issuer"
-          cert-manager.io/private-key-algorithm: "ECDSA"
-          cert-manager.io/common-name: "<your_pap_domain>"
-        hosts:
-          - host: <your_pap_domain>
-            paths:
-              - "/"
-        tls:
-          - secretName: <your_pap_domain>-tls
-            hosts:
-              - <your_pap_domain>
-
-# --- Enabled by default: set to false if you do not need them ---
-# Scorpio Context Broker (TMForum backend — see note on Scorpio above)
-scorpio:
-  enabled: true
-tm-forum-api:
-  enabled: true         # TMForum APIs: product catalog, ordering, ...
-contract-management:
-  enabled: true         # contract-based access, needs the TMForum API
-
-# --- Disabled by default (enable as needed) ---
-marketplace:
-  enabled: false        # local marketplace portal (BAE), needs MongoDB
-fdsc-edc:
-  enabled: false        # Dataspace Protocol connector
-identityhub:
-  enabled: false        # only needed with the Decentralized Claims Protocol
-vault:
-  enabled: false
+--8<-- "charts/data-space-connector/examples/provider.yaml:identity"
 ```
 
-A provider without any of the optional components sets `scorpio`, `tm-forum-api` and `contract-management` to `false`: leaving them out of the values file deploys them.
+#### Credential issuer: Keycloak
 
-2. Install the chart with your values, pinning its version (see the [release notes](../../../release-notes) for what changes between versions):
+Keycloak issues the provider's own users their credentials and signs them with the DID's key: the `prepare-keystore` init container turns the DID Secret into the PKCS12 keystore the realm reads. The ingress publishes only `/realms/<realm>` and `/resources`; the admin console and the master realm stay inside the cluster. See [Keycloak configuration](../KEYCLOAK.md).
+
+```yaml
+--8<-- "charts/data-space-connector/examples/provider.yaml:keycloak"
+```
+
+#### Authentication and authorization
+
+The verifier checks each request's credentials against the Trust Anchor's registry (`tirAddress`) and the provider's local trusted issuers list, and issues access tokens signed with a persistent RSA key. APISIX is the gateway in standalone mode with its Admin API disabled, OPA decides on the ODRL policies the PAP holds, and each component connects to its own PostgreSQL user. If the certificates in the chain are not publicly trusted, see [Trusting a private CA](#trusting-a-private-ca) for `ssl_verify`.
+
+```yaml
+--8<-- "charts/data-space-connector/examples/provider.yaml:auth"
+```
+
+#### Offers and contracts
+
+Scorpio stores the TM Forum data and the TM Forum API serves it; both stay internal, reachable only through APISIX. contract-management turns completed orders into ODRL policies at the PAP.
+
+```yaml
+--8<-- "charts/data-space-connector/examples/provider.yaml:offers"
+```
+
+#### Signing key
+
+The verifier's token-signing key is a persistent RSA key kept in a Secret, so access tokens stay valid across restarts and replicas.
+
+```yaml
+--8<-- "charts/data-space-connector/examples/provider.yaml:extra"
+```
+
+#### Optional components
+
+`scorpio`, `tm-forum-api` and `contract-management` are part of the profile because a provider that offers TM Forum products needs them; a provider that only protects a plain data service can set them to `false`. Other components are optional and off by default: a local marketplace ([`examples/provider-marketplace.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/examples/provider-marketplace.yaml)), the Dataspace Protocol connector ([DSP Integration](../../../DSP_INTEGRATION.md)), and Vault for production identity material ([Production setup for Vault](../../production/VAULT.md)).
+
+#### Install the chart
+
+Install the chart with your values, pinning its version (see the [release notes](../../../release-notes/11-x.md) for what changes between versions):
 
 ```shell
 helm install provider oci://quay.io/fiware/helm-charts/data-space-connector \
@@ -543,21 +378,23 @@ helm repo add fiware-dsc https://fiware.github.io/data-space-connector
 helm install provider fiware-dsc/data-space-connector --version <version> -n provider --create-namespace -f provider-values.yaml
 ```
 
-See the reference profile [`examples/provider.yaml`](../../../../charts/data-space-connector/examples/provider.yaml) for a complete example.
+See the reference profile [`examples/provider.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/examples/provider.yaml) for a complete example.
 
 #### Other deployment options
 
-A base example for a provider deployment can be found at [k3s/provider.yaml](../../../../k3s/provider.yaml).
+A base example for a provider deployment can be found at [k3s/provider.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider.yaml).
 
-> **Note:** These values are intended for **local development and testing** environments. For a real production deployment, they must be customized to meet your infrastructure, security, and availability requirements. See [Production considerations](#production-considerations) below.
+!!! note
+
+    These values are intended for **local development and testing** environments. For a real production deployment, they must be customized to meet your infrastructure, security, and availability requirements. See [Production considerations](#production-considerations) below.
 
 For other deployment scenarios, the base `provider.yaml` can be extended with additional overlay values files (which take precedence over the base). The following overlays are available:
 
 | Overlay | File | Description |
 |---------|------|-------------|
-| **eIDAS / ELSI** | [k3s/provider-eidas.yaml](../../../../k3s/provider-eidas.yaml) | Configuration for deployments compliant with the [ELSI](https://alastria.github.io/did-method-elsi/) trust framework, including [eIDAS 2.0 trust list validation](../../eidas/README.md) via VCVerifier's built-in PKIX chain verification against the EU Trusted Lists |
-| **Gaia-X** | [k3s/provider-gaia-x.yaml](../../../../k3s/provider-gaia-x.yaml) | Configuration for [Gaia-X](https://gaia-x.eu/) compliant deployments |
-| **DSP** | [k3s/dsp-provider.yaml](../../../../k3s/dsp-provider.yaml) | Enables the [Dataspace Protocol (DSP)](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol) connector on the provider side |
+| **eIDAS / ELSI** | [k3s/provider-eidas.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider-eidas.yaml) | Configuration for deployments compliant with the [ELSI](https://alastria.github.io/did-method-elsi/) trust framework, including [eIDAS 2.0 trust list validation](../../eidas/README.md) via VCVerifier's built-in PKIX chain verification against the EU Trusted Lists |
+| **Gaia-X** | [k3s/provider-gaia-x.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider-gaia-x.yaml) | Configuration for [Gaia-X](https://gaia-x.eu/) compliant deployments |
+| **DSP** | [k3s/dsp-provider.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/dsp-provider.yaml) | Enables the [Dataspace Protocol (DSP)](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol) connector on the provider side |
 
 For example, to deploy a provider with ELSI compliance:
 
@@ -579,7 +416,7 @@ helm install provider oci://quay.io/fiware/helm-charts/data-space-connector --ve
 
 - Use a registered domain name that your organization controls for the `did:web` identifier
 - Ensure the DID document is served over HTTPS with a valid certificate
-- Protect the private key associated with your DID — it is the foundation of your organization's identity in the data space. If compromised, an attacker could issue credentials on your behalf
+- Protect the private key associated with your DID: it is the foundation of your organization's identity in the data space. If compromised, an attacker could issue credentials on your behalf
 
 #### Identity key lifecycle
 
@@ -702,7 +539,7 @@ By default (`generateKey: true`) the verifier generates that key at startup and 
 
 If the provider participates in a [Central Marketplace](../../../CENTRAL_MARKETPLACE.md):
 
-- The Contract Management host exposed through APISIX must be reachable from the Central Marketplace over HTTPS with a valid certificate. The `contractManagement.address` registered in the provider's Organization at the marketplace must match this host exactly — no trailing paths, and the scheme/port used when registering must remain valid from the marketplace's network.
+- The Contract Management host exposed through APISIX must be reachable from the Central Marketplace over HTTPS with a valid certificate. The `contractManagement.address` registered in the provider's Organization at the marketplace must match this host exactly: no trailing paths, and the scheme/port used when registering must remain valid from the marketplace's network.
 - Coordinate version upgrades with the Central Marketplace operator: changes in the `contract-management` notification contract require both sides to be aligned. Keep the minimum versions noted in [Participating in a Central Marketplace](#participating-in-a-central-marketplace) as a floor.
 - Keep the local Trusted Issuers List aligned with the Central Marketplace's `MarketplaceCredential` issuer. If the marketplace rotates its DID, the provider will stop accepting notifications until the TIL and the Trust Anchor's TIR are updated.
 

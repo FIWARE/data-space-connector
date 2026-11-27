@@ -48,7 +48,7 @@ The last two rows exist for the DSP integration, and DSP has no notion of a comp
 
 ## The container names differ
 
-The same concept is spelled differently per API — this is the most common authoring mistake:
+The same concept is spelled differently per API. This is the most common authoring mistake:
 
 | Entity | Characteristic list | Value list |
 |---|---|---|
@@ -60,7 +60,7 @@ discriminates on. A characteristic without a `valueType` is skipped.
 
 ## Worked example
 
-Continuing the "M&P K8S" example of the [local deployment](../../local-deployment/LOCAL.MD): the
+Continuing the "M&P K8S" example of the [local deployment](../../local-deployment/LOCAL.md): the
 product is composed of one service that carries the cluster-creation policy.
 
 **1 — the service specification, with the policy**
@@ -150,7 +150,7 @@ export PRODUCT_SPEC_ID=$(curl -k -x localhost:8888 -X 'POST' https://tm-forum-ap
   }" | jq -r '.id')
 ```
 
-The referenced service specification has to exist first — the TMForum API validates the reference and
+The referenced service specification has to exist first: the TMForum API validates the reference and
 rejects the product specification otherwise.
 
 **3 — the offering** is unchanged: it references the `ProductSpecification` as before.
@@ -160,29 +160,29 @@ credential configuration at the trusted-issuers-list.
 
 ## The rules that decide what a customer may do
 
-**Union, never override.** The effective configuration of a product is the union over the product
+Union, never override. The effective configuration of a product is the union over the product
 and its services. No level narrows another.
 
-**Credential configurations widen.** The trusted-issuers-list evaluates several configurations of one
+Credential configurations widen. The trusted-issuers-list evaluates several configurations of one
 credential type as an OR, so a permissive entry relaxes a restrictive one. If a service is part of a
 "small" and a "full" product, the small product's customer is *not* restricted by the small product's
-entry alone — author the restriction where it is not shared, or split the service.
+entry alone; author the restriction where it is not shared, or split the service.
 
-**Policies are keyed by `odrl:uid`.** Identical policies from several parts are installed once. Two
+Policies are keyed by `odrl:uid`. Identical policies from several parts are installed once. Two
 *different* policies claiming the same `odrl:uid` fail the activation, because the ODRL-PAP keys an
 installed policy by that uid plus the order id and could only ever keep one of them. Give every
 policy its own uid.
 
-**One provider per composition.** A `ServiceSpecification` whose `relatedParty` names a different
+One provider per composition. A `ServiceSpecification` whose `relatedParty` names a different
 provider than the product fails the activation. A part that names no provider inherits the product's
 one, which is what the marketplace produces. Composing across providers is not supported.
 
-**The order is a snapshot.** The configuration is resolved when the order completes, and not
+The order is a snapshot. The configuration is resolved when the order completes, and not
 re-resolved when a specification changes afterwards. Editing a shared service specification does not
 retroactively change what existing orders granted.
 
-**Revocation is per order.** Credentials are granted at the trusted-issuers-list under the id of the
-order that granted them, so cancelling one order leaves what another order granted in place — which
+Revocation is per order. Credentials are granted at the trusted-issuers-list under the id of the
+order that granted them, so cancelling one order leaves what another order granted in place, which
 is what makes sharing a service specification safe.
 
 ## When something does not activate

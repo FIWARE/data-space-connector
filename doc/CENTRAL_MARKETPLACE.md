@@ -15,7 +15,7 @@ The basic flow of integration is as following:
 1. The Data Provider has to prepare its integration by:
 
     1.1. Register the Marketplace as a trusted-issuer of credentials used by the Contract Management
-    1.2. Register policies that allow the marketplace to send order notifications to the Contract-Management(see [allowContractManagement.json](../it/src/test/resources/policies/allowContractManagement.json) as an example)
+    1.2. Register policies that allow the marketplace to send order notifications to the Contract-Management(see [allowContractManagement.json](https://github.com/FIWARE/data-space-connector/blob/main/it/src/test/resources/policies/allowContractManagement.json) as an example)
     1.3 Provider has to register itself at the Central Marketplace as an Oranization, containing access information to the Contract Management
 
 2. Create Product Offering
@@ -61,7 +61,7 @@ curl -k -x localhost:8888 -X 'POST' https://pap-provider.127.0.0.1.nip.io/policy
     -d "$(cat ./it/src/test/resources/policies/allowContractManagement.json)"
 ```
 
-Get a "LegalPersonCredential" for the Provider, containing the role "REPRESENTATIVE".(see [Provider` ClientScopes config](../k3s/provider.yaml#957))
+Get a "LegalPersonCredential" for the Provider, containing the role "REPRESENTATIVE".(see [Provider` ClientScopes config](https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider.yaml#957))
 
 ```shell
 export PROVIDER_USER_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-provider.127.0.0.1.nip.io user-credential employee); echo ${PROVIDER_USER_CREDENTIAL}

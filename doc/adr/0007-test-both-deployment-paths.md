@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-10-14
-**Context doc:** [`../deployment-integration/local-deployment/LOCAL.MD`](../deployment-integration/local-deployment/LOCAL.MD#deployment)
+**Context doc:** [`../deployment-integration/local-deployment/LOCAL.md`](../deployment-integration/local-deployment/LOCAL.md#deployment)
 
 ## Context
 

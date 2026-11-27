@@ -45,7 +45,7 @@ The marketplace stores its data in MongoDB. Use the one you already have, or let
 
 #### The operator, for a MongoDB deployed by the chart
 
-`managedMongo` needs an operator that handles `MongoDBCommunity` resources: the [MongoDB Community Operator](https://github.com/mongodb/mongodb-kubernetes-operator), whose chart the connector pins (`community-operator` in [Chart.yaml](../../../../charts/data-space-connector/Chart.yaml), 0.13.0 at the time of writing), or its successor [MongoDB Controllers for Kubernetes](https://github.com/mongodb/mongodb-kubernetes), which manages the same resource. The operator is cluster-wide: install it once, outside the connector, and leave `mongo-operator.enabled: false` (the default) in the connector's values. The [Cluster Prerequisites](../PREREQUISITES.md#installing-the-operators-once) explain why each operator can be installed only once per cluster.
+`managedMongo` needs an operator that handles `MongoDBCommunity` resources: the [MongoDB Community Operator](https://github.com/mongodb/mongodb-kubernetes-operator), whose chart the connector pins (`community-operator` in [Chart.yaml](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/Chart.yaml), 0.13.0 at the time of writing), or its successor [MongoDB Controllers for Kubernetes](https://github.com/mongodb/mongodb-kubernetes), which manages the same resource. The operator is cluster-wide: install it once, outside the connector, and leave `mongo-operator.enabled: false` (the default) in the connector's values. The [Cluster Prerequisites](../PREREQUISITES.md#installing-the-operators-once) explain why each operator can be installed only once per cluster.
 
 Install it with `watchNamespace: "*"`, which lets it manage databases outside its own namespace:
 
@@ -355,7 +355,7 @@ marketplace:
               path: ca.crt
 ```
 
-Do not set `NODE_TLS_REJECT_UNAUTHORIZED=0` instead: it disables certificate verification for every call the logic proxy makes. The local deployment in [`k3s/`](../../../../k3s) uses it, but those values are meant for a test environment only.
+Do not set `NODE_TLS_REJECT_UNAUTHORIZED=0` instead: it disables certificate verification for every call the logic proxy makes. The local deployment in [`k3s/`](https://github.com/FIWARE/data-space-connector/tree/main/k3s) uses it, but those values are meant for a test environment only.
 
 ## Common mistakes
 

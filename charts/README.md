@@ -35,7 +35,7 @@ The Secret names the components expect (when `*.generatePasswords` is `false`) a
 ## Trust Anchor
 
 The folder [trust-anchor](./trust-anchor) contains a minimal example of a Trust Anchor, provided as 
-a [Helm Umbrella Chart](https://helm.sh/docs/howto/charts_tips_and_tricks/#complex-charts-with-many-dependencies). Basically it consists of a Trusted Issuers Registry with an attached database. This is also used in the local deployment of a Minimum Viable Dataspace described [here](../doc/deployment-integration/local-deployment/LOCAL.MD).
+a [Helm Umbrella Chart](https://helm.sh/docs/howto/charts_tips_and_tricks/#complex-charts-with-many-dependencies). Basically it consists of a Trusted Issuers Registry with an attached database. This is also used in the local deployment of a Minimum Viable Dataspace described [here](../doc/deployment-integration/local-deployment/LOCAL.md).
 
 With `consentManagement.enabled`, the chart also runs the authority side of consent management: the
 [dsc-consent-manager](https://github.com/SEAMWARE/dsc-consent-manager) on the chart's Zalando Postgres,

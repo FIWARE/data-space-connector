@@ -2,9 +2,9 @@
 
 ## Overview
 
-The Data Space Operator operates the **shared trust infrastructure** of the data space. Unlike consumer or provider roles, the Operator is not a participant in data exchange — it is the **neutral governance authority** that maintains the trust framework enabling all participants to interact securely.
+The Data Space Operator runs the shared trust infrastructure of the data space. It does not take part in data exchange the way a consumer or provider does; it is the neutral authority that maintains the trust framework so participants can interact securely.
 
-In a FIWARE Data Space, the Operator's primary responsibility is operating the **Trust Anchor**: the central registry where all trusted participants and their credentials are registered.
+In a FIWARE Data Space, the Operator's main responsibility is running the Trust Anchor: the central registry where all trusted participants and their credentials are registered.
 
 The cluster that runs the Trust Anchor needs the [Cluster Prerequisites](../PREREQUISITES.md), in particular, when the chart deploys its PostgreSQL, a single installation of the Postgres operator per cluster.
 
@@ -12,7 +12,7 @@ The cluster that runs the Trust Anchor needs the [Cluster Prerequisites](../PRER
 
 ### Participant onboarding
 
-The Operator is also responsible for the **onboarding of new organizations** into the data space. This process includes validating the required documentation and registering the organization in the Trust Anchor.
+The Operator is also responsible for onboarding new organizations into the data space. This involves validating the required documentation and registering the organization in the Trust Anchor.
 
 1. Verify the organization's identity and legitimacy (out-of-band process)
 2. Register the organization's DID at the Trust Anchor
@@ -30,7 +30,9 @@ The [Trusted Issuers Registry](https://github.com/FIWARE/trusted-issuers-list) i
 - Exposes a read-only API (`/v4/issuers`) for participants to verify trust
 - Backed by a management API (`/issuer`) for registering and managing trusted issuers
 
-> **Note:** The FIWARE [Trusted Issuers Registry](https://github.com/FIWARE/trusted-issuers-list) is the default implementation shipped with the FIWARE Data Space Connector, but it is not the only option. Any component that exposes the [EBSI Trusted Issuers Registry API](https://hub.ebsi.eu/api/core/issuers-registry) can be used as the Trust Anchor's registry — including **blockchain-backed implementations** such as the [EBSI Trusted Issuers Registry](https://hub.ebsi.eu/api/core/issuers-registry) itself. This allows data spaces to align the trust registry with the governance and decentralization model that best fits their requirements.
+!!! note
+
+    The FIWARE [Trusted Issuers Registry](https://github.com/FIWARE/trusted-issuers-list) is the default implementation shipped with the FIWARE Data Space Connector, but it is not the only option. Any component that exposes the [EBSI Trusted Issuers Registry API](https://hub.ebsi.eu/api/core/issuers-registry) can serve as the Trust Anchor's registry, including blockchain-backed implementations such as the [EBSI Trusted Issuers Registry](https://hub.ebsi.eu/api/core/issuers-registry) itself. A data space can then match the trust registry to its own governance and decentralization model.
 
 ### Trusted Issuers List (TIL) management API
 
@@ -43,7 +45,7 @@ The management interface allows the Operator to:
 
 The Trust Anchor requires an SQL database to persist the list of trusted issuers.
 
-**Important:** The Trust Anchor must have its own **dedicated database instance**, completely separate from any participant's infrastructure. Since the Operator is a neutral entity independent of any provider or consumer, sharing database infrastructure would compromise the neutrality and security of the trust registry.
+The Trust Anchor must have its own dedicated database instance, separate from any participant's infrastructure. Because the Operator is neutral and independent of any provider or consumer, sharing a database would compromise the neutrality and security of the trust registry.
 
 ## Optional components
 
@@ -61,9 +63,11 @@ The Onboarding Portal simplifies the Operator's work by replacing manual registr
 
 Some data spaces run a **shared Central Marketplace** where providers publish offerings and consumers browse and purchase access. In a neutral governance model, the Operator is the natural host for such a marketplace, since it is already the non-participant entity trusted by every organization in the data space.
 
-> **Note:** The Central Marketplace is **not a Provider**. It does not host data services or protect them with a PAP; it only provides a catalog, an ordering API and a UI. Its role is to broker purchases and notify the actual data providers so they can enforce access on their own infrastructure.
+!!! note
 
-Hosting the Central Marketplace is **optional** and independent from operating the Trust Anchor. Both responsibilities can be concentrated in the same actor or split among different ones. In either case, the Central Marketplace must be deployed with its **own DID, its own database and its own Kubernetes namespace** — never sharing infrastructure with the Trust Anchor's TIR.
+    The Central Marketplace is **not a Provider**. It does not host data services or protect them with a PAP; it only provides a catalog, an ordering API and a UI. Its role is to broker purchases and notify the actual data providers so they can enforce access on their own infrastructure.
+
+Hosting the Central Marketplace is optional and independent from operating the Trust Anchor. Both responsibilities can sit with the same actor or be split between different ones. Either way, the Central Marketplace must be deployed with its own DID, its own database and its own Kubernetes namespace, and must not share infrastructure with the Trust Anchor's TIR.
 
 #### Required components
 
@@ -78,7 +82,7 @@ The Central Marketplace is deployed using the same `fiware/data-space-connector`
 | **Contract Management** | Configured in central-marketplace mode: `enableCentralMarketplace: true`, `enableOdrlPap: false`, `oid4vp.enabled: true`. On order completion, it authenticates with the marketplace's credential and notifies the provider's Contract Management. |
 | **VCVerifier + Trusted Issuers List (local)** | Authenticate the providers (and users) that access the marketplace's catalog and ordering APIs. |
 
-The **ODRL-PAP, OPA and data-service protection** components that a Provider deploys are **not** needed in the Central Marketplace — the marketplace does not expose protected data services.
+The ODRL-PAP, OPA and data-service protection components that a Provider deploys are not needed in the Central Marketplace, because it does not expose protected data services.
 
 #### Optional components
 
@@ -86,8 +90,10 @@ The **ODRL-PAP, OPA and data-service protection** components that a Provider dep
 |-----------|---------|
 | **Marketplace UI (BAE)** | Business API Ecosystem web portal (Logic Proxy + Charging Backend + APIs) on top of the TMForum API. Offers a user-friendly interface for participants to register, publish offerings and purchase access — all the same actions that can be performed directly through the TMForum APIs. Requires `BAE_LP_DATASPACE_ENABLED=true` and `BAE_LP_PURCHASE_ENABLED=true` for data space purchase flows, plus its own MongoDB. |
 
-> **Note:** The Marketplace UI is **not strictly required** for the Central Marketplace to be operational — a headless deployment (TMForum API + Contract Management only) is valid, and all the flows documented in [CENTRAL_MARKETPLACE.md](../../../CENTRAL_MARKETPLACE.md) can be driven exclusively through the TMForum APIs.
-> However, for **production deployments it is highly recommended** to deploy the UI, since it provides a usable experience for end-users (sellers publishing offerings, customers browsing and buying). A UI-less deployment is a reasonable choice only when the scenario is **purely machine-to-machine** and participants integrate directly with the TMForum APIs from their own systems.
+!!! note
+
+    The Marketplace UI is **not strictly required** for the Central Marketplace to be operational — a headless deployment (TMForum API + Contract Management only) is valid, and all the flows documented in [CENTRAL_MARKETPLACE.md](../../../CENTRAL_MARKETPLACE.md) can be driven exclusively through the TMForum APIs.
+    However, for **production deployments it is highly recommended** to deploy the UI, since it provides a usable experience for end-users (sellers publishing offerings, customers browsing and buying). A UI-less deployment is a reasonable choice only when the scenario is **purely machine-to-machine** and participants integrate directly with the TMForum APIs from their own systems.
 
 #### Database
 
@@ -97,7 +103,7 @@ If the [Marketplace UI (BAE)](#optional-components) is also deployed, its Chargi
 
 #### Deployment values
 
-The Central Marketplace uses the `fiware/data-space-connector` Helm chart with a different subset of components enabled than a Provider. The snippets below show the key values required on top of a standard deployment — the full list of components (ingresses, TLS, Keycloak realm, credential definitions, etc.) follows the same patterns documented for the [Provider role](../provider/README.md#deployment). See also the local demo overlays in [`k3s/consumer.yaml`](../../../../k3s/consumer.yaml), [`k3s/consumer-auth.yaml`](../../../../k3s/consumer-auth.yaml) and [`k3s/consumer-tmf.yaml`](../../../../k3s/consumer-tmf.yaml) for a complete example.
+The Central Marketplace uses the `fiware/data-space-connector` Helm chart with a different subset of components enabled than a Provider. The snippets below show the key values required on top of a standard deployment — the full list of components (ingresses, TLS, Keycloak realm, credential definitions, etc.) follows the same patterns documented for the [Provider role](../provider/README.md#deployment). See also the local demo overlays in [`k3s/consumer.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer.yaml), [`k3s/consumer-auth.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-auth.yaml) and [`k3s/consumer-tmf.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-tmf.yaml) for a complete example.
 
 **1. Enable Contract Management in central-marketplace mode**
 
@@ -136,7 +142,7 @@ contract-management:
       tag: 3.3.8                            # minimum image required for central marketplace mode
 ```
 
-When a TMForum `ProductOrder` is completed, Contract Management inspects the `relatedParty` list of the underlying `ProductSpecification` to determine which participant is the provider — and therefore to which Contract Management it must send the activation notification. `organization.provider.role` configures the `relatedParty.role` value that Contract Management looks for. The chart default is `provider`, which matches the value written by clients that call the TMForum API directly (as in the [demo flow](../../../CENTRAL_MARKETPLACE.md#create-the-offering-step-2)). When the Marketplace UI (BAE) is deployed instead, it tags the provider with the role `seller`, so **in that case this value must be overridden to `seller`**. If the configured value does not match the role that clients write into `relatedParty`, Contract Management will not be able to resolve the provider from the order and no notification will be sent.
+When a TMForum `ProductOrder` is completed, Contract Management inspects the `relatedParty` list of the underlying `ProductSpecification` to determine which participant is the provider, and therefore which Contract Management it must send the activation notification to. `organization.provider.role` configures the `relatedParty.role` value that Contract Management looks for. The chart default is `provider`, which matches the value written by clients that call the TMForum API directly (as in the [demo flow](../../../CENTRAL_MARKETPLACE.md#create-the-offering-step-2)). When the Marketplace UI (BAE) is deployed instead, it tags the provider with the role `seller`, so **in that case this value must be overridden to `seller`**. If the configured value does not match the role that clients write into `relatedParty`, Contract Management will not be able to resolve the provider from the order and no notification will be sent.
 
 **2. Enable the TMForum API and its NGSI-LD backend**
 
@@ -206,7 +212,7 @@ When this block is enabled, remember to also override `contract-management.organ
 
 **4. Issue the marketplace's authentication credential from Keycloak**
 
-The Contract Management sends the notifications authenticated with a Verifiable Credential issued by the marketplace's own Keycloak. In this documentation and in the shipped examples this credential is a `MarketplaceCredential`, defined in the realm as the `marketplace-credential` entry of `keycloak.realm.verifiableCredentials` (see [`k3s/consumer.yaml`](../../../../k3s/consumer.yaml)).
+The Contract Management sends the notifications authenticated with a Verifiable Credential issued by the marketplace's own Keycloak. In this documentation and in the shipped examples this credential is a `MarketplaceCredential`, defined in the realm as the `marketplace-credential` entry of `keycloak.realm.verifiableCredentials` (see [`k3s/consumer.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer.yaml)).
 
 The [vc-operator](https://github.com/SEAMWARE/vc-operator) requests the credential and keeps it renewed in a Secret, which is mounted into the Contract Management pod. It authenticates at Keycloak as a confidential client of its own, with the client credentials grant, so no user password is involved:
 
@@ -282,11 +288,11 @@ The [vc-operator](https://github.com/SEAMWARE/vc-operator) requests the credenti
             mountPath: /credential-repo
     ```
 
-[`k3s/consumer-auth.yaml`](../../../../k3s/consumer-auth.yaml) and [`k3s/consumer-tmf.yaml`](../../../../k3s/consumer-tmf.yaml) do the same for the local demo, together with a `LegalPersonCredential`.
+[`k3s/consumer-auth.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-auth.yaml) and [`k3s/consumer-tmf.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-tmf.yaml) do the same for the local demo, together with a `LegalPersonCredential`.
 
 ##### Authentication credential type
 
-The `MarketplaceCredential` type is **not mandatory** — it is simply the type used throughout this documentation, the [local demo](../../../CENTRAL_MARKETPLACE.md) and the shipped examples (see [`k3s/consumer.yaml`](../../../../k3s/consumer.yaml) Keycloak realm and [`k3s/provider.yaml`](../../../../k3s/provider.yaml) policies). Any credential type can be used as long as the three sides agree on it:
+The `MarketplaceCredential` type is **not mandatory** — it is simply the type used throughout this documentation, the [local demo](../../../CENTRAL_MARKETPLACE.md) and the shipped examples (see [`k3s/consumer.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer.yaml) Keycloak realm and [`k3s/provider.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider.yaml) policies). Any credential type can be used as long as the three sides agree on it:
 
 1. **Keycloak (this realm)** must issue the chosen type — adjust the `verifiable_credential_type` of its `verifiableCredentials.<id>` entry, the `credentialType` of the request under `vcCredentials`, and the file name the Secret is mounted as, which Contract Management reads.
 2. **Central Marketplace VCVerifier + PAP** use that same type to let its Contract Management present it to providers. No extra configuration is typically needed here.
@@ -298,7 +304,9 @@ If the type is changed, it must be changed consistently on all three sides or pr
 
 Providers and users accessing the catalog and ordering APIs authenticate via OID4VP against the marketplace's own VCVerifier + local Trusted Issuers List. The values mirror those of a Provider ([see Provider role](../provider/README.md#deployment)), but the services registered with `vcverifier.registration.services` must expose a `LegalPersonCredential`-based scope for the catalog/ordering endpoints (so any registered participant can log in to publish or buy offerings).
 
-> **Note:** The Central Marketplace does **not** deploy the ODRL-PAP + OPA data-service-protection stack. Its only protected surface is the TMForum API behind APISIX with OID4VP auth.
+!!! note
+
+    The Central Marketplace does **not** deploy the ODRL-PAP + OPA data-service-protection stack. Its only protected surface is the TMForum API behind APISIX with OID4VP auth.
 
 #### k3s/ reference values
 
@@ -306,9 +314,9 @@ The local demo (`mvn clean deploy -Plocal,central`) deploys the Central Marketpl
 
 | File | Description |
 |------|-------------|
-| [k3s/consumer.yaml](../../../../k3s/consumer.yaml) | Base values for the organization hosting the Central Marketplace (Keycloak, DID, database, etc.) |
-| [k3s/consumer-auth.yaml](../../../../k3s/consumer-auth.yaml) | Authentication stack (VCVerifier, Trusted Issuers List, APISIX routes) required to protect the marketplace APIs |
-| [k3s/consumer-tmf.yaml](../../../../k3s/consumer-tmf.yaml) | TMForum API, Scorpio backend and Contract Management configured in central-marketplace mode (`enableCentralMarketplace: true`, `oid4vp.enabled: true`) |
+| [k3s/consumer.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer.yaml) | Base values for the organization hosting the Central Marketplace (Keycloak, DID, database, etc.) |
+| [k3s/consumer-auth.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-auth.yaml) | Authentication stack (VCVerifier, Trusted Issuers List, APISIX routes) required to protect the marketplace APIs |
+| [k3s/consumer-tmf.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-tmf.yaml) | TMForum API, Scorpio backend and Contract Management configured in central-marketplace mode (`enableCentralMarketplace: true`, `oid4vp.enabled: true`) |
 
 Deploying the Central Marketplace with the same layout:
 
@@ -337,13 +345,13 @@ helm repo add fiware-dsc https://fiware.github.io/data-space-connector
 helm install trust-anchor fiware-dsc/trust-anchor --version <version> -n trust-anchor --create-namespace -f values.yaml
 ```
 
-Start from the reference profile [`examples/trust-anchor.yaml`](../../../../charts/trust-anchor/examples/trust-anchor.yaml), an example values file to adapt to your installation. Its [README](../../../../charts/data-space-connector/examples/README.md) explains the prerequisites, the installation and how to register the participants.
+Start from the reference profile [`examples/trust-anchor.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/charts/trust-anchor/examples/trust-anchor.yaml), an example values file to adapt to your installation. Its [README](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/examples/README.md) explains the prerequisites, the installation and how to register the participants.
 
 ## Production deployment
 
 ### Dedicated infrastructure
 
-The Trust Anchor should be deployed on **infrastructure managed independently** from any participant:
+The Trust Anchor should be deployed on infrastructure managed independently from any participant:
 - Separate Kubernetes cluster, or at minimum a dedicated namespace with strict RBAC
 - Dedicated database instance (not shared with provider or consumer databases)
 - Independent operations team with its own access controls
@@ -358,19 +366,19 @@ The Trust Anchor should be deployed on **infrastructure managed independently** 
 - Enable persistence for the SQL database with durable storage
 - Configure automated backups with a recovery point objective (RPO) appropriate for your data space
 - Test restore procedures regularly
-- The Trust Anchor's data is critical — if it's lost, all participants lose their trust relationships
+- The Trust Anchor's data is critical: if it is lost, all participants lose their trust relationships
 
 ### TLS and network security
 
 - Use valid TLS certificates from a real CA (not self-signed)
 - The TIR read API (`/v4/issuers`) should be publicly accessible (participants need to query it)
-- The TIL management API (`/issuer`) must be **strictly restricted** — only authorized operators should be able to register or remove issuers
+- The TIL management API (`/issuer`) must be strictly restricted: only authorized operators should be able to register or remove issuers
 
 ### Integration with trust frameworks
 
 For production data spaces, consider integrating with established trust frameworks:
-- [Gaia-X Digital Clearing Houses (GXDCH)](https://gaia-x.eu/services-deliverables/digital-clearing-house/) — for Gaia-X compliance. See [Gaia-X Integration](../../../GAIA_X.MD)
-- [EBSI](https://ec.europa.eu/digital-building-blocks/sites/display/EBSI) — for European Blockchain Services Infrastructure compatibility
+- [Gaia-X Digital Clearing Houses (GXDCH)](https://gaia-x.eu/services-deliverables/digital-clearing-house/): for Gaia-X compliance. See [Gaia-X Integration](../../../GAIA_X.md)
+- [EBSI](https://ec.europa.eu/digital-building-blocks/sites/display/EBSI): for European Blockchain Services Infrastructure compatibility
 - Custom trust frameworks defined by the data space governance body
 
 ## Monitoring

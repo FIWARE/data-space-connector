@@ -191,10 +191,12 @@ create, and the bootstrap Job is idempotent, so it rewrites aliases that do.
 `secret/metadata/*` because that is where KV v2 keeps versions, and the only way
 EDC's `Vault#deleteSecret()` removes anything — keypair revocation needs it.
 
-> :warning: **Do not attach `default` and nothing else.** Vault's `default` policy
-> grants token self-management and no access to `secret/` at all, and Vault is
-> deny-by-default: every read and write returns `403`. A token like that renews
-> itself happily and fails the first `vault write` of the bootstrap Job.
+!!! warning
+
+    **Do not attach `default` and nothing else.** Vault's `default` policy
+    grants token self-management and no access to `secret/` at all, and Vault is
+    deny-by-default: every read and write returns `403`. A token like that renews
+    itself happily and fails the first `vault write` of the bootstrap Job.
 
 **Renewal.** Each runtime renews its own token in process — `auth/token/lookup-self`
 then `auth/token/renew-self`, rescheduled from the `lease_duration` Vault returns and

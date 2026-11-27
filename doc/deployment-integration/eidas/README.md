@@ -169,17 +169,21 @@ decentralizedIam:
 When `eidas.enabled` is `true`, VCVerifier fetches the EU LOTL at startup and
 builds a trust store from it. No external validation service is needed.
 
-> **For a `did:elsi` issuer this is already enough** -- the proof check validates
-> the chain on the issuer DID alone. **For a `did:web` or HTTPS issuer it is
-> not:** their `x5c` header is ignored by the proof check, so the credential has
-> to be an SD-JWT carrying `eidasConfig` before anything is checked. See
-> [Turning Validation On](#turning-validation-on-eidasconfig-per-credential-type).
-> `eidasConfig` is also what adds per-type country and qualified-service filters,
-> which `did:elsi` deployments otherwise do not get.
+!!! note
 
-> **Note:** The `elsi.enabled` toggle is only needed when the issuer uses
-> the `did:elsi` DID method. For `did:web` or HTTPS-issued credentials,
-> only the `eidas` block is required.
+    **For a `did:elsi` issuer this is already enough** -- the proof check validates
+    the chain on the issuer DID alone. **For a `did:web` or HTTPS issuer it is
+    not:** their `x5c` header is ignored by the proof check, so the credential has
+    to be an SD-JWT carrying `eidasConfig` before anything is checked. See
+    [Turning Validation On](#turning-validation-on-eidasconfig-per-credential-type).
+    `eidasConfig` is also what adds per-type country and qualified-service filters,
+    which `did:elsi` deployments otherwise do not get.
+
+!!! note
+
+    The `elsi.enabled` toggle is only needed when the issuer uses
+    the `did:elsi` DID method. For `did:web` or HTTPS-issued credentials,
+    only the `eidas` block is required.
 
 ### Configuration Reference
 
@@ -208,7 +212,7 @@ All values live under `decentralizedIam.vcAuthentication.vcverifier.deployment.e
 | `countries` | filter to relevant countries | `[]` (all) |
 | `lotlUrl` | default (official EU LOTL) | the in-cluster mock, see [Demo Flow](#demo-flow) |
 
-See the [k3s/provider-eidas.yaml](../../../k3s/provider-eidas.yaml) overlay
+See the [k3s/provider-eidas.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider-eidas.yaml) overlay
 for a complete local-deployment example.
 
 ---
@@ -249,13 +253,15 @@ elsi:
 ```
 
 This creates a Kubernetes Secret with the keystore and configures the
-Keycloak [realm template](../../../charts/data-space-connector/templates/realm.yaml)
+Keycloak [realm template](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/templates/realm.yaml)
 to use `did:elsi` with the corresponding java-keystore key provider.
 
-> **Important:** Since Keycloak 26.6.4, the `java-keystore` realm key
-> provider only reads keystores from `/opt/keycloak/data/<realm-name>/`.
-> Both `storePath` and the container's volume mount must point inside that
-> directory.
+!!! important
+
+    Since Keycloak 26.6.4, the `java-keystore` realm key
+    provider only reads keystores from `/opt/keycloak/data/<realm-name>/`.
+    Both `storePath` and the container's volume mount must point inside that
+    directory.
 
 ### JAdES Plugin for x5c Header Injection
 
@@ -296,10 +302,12 @@ credential attribute. The chart's `_realm.tpl` keeps it unprefixed for exactly
 that reason (`dsc.vcScopeUnprefixedAttributes`); writing `vc.jades.enabled`
 yourself would hide it from the plugin.
 
-> **Note:** 1.3.0 requires Keycloak 26.7.x. The OID4VCI signing SPI was
-> rewritten after 26.4, and the plugin's `provided` dependency set is pinned to
-> what that server ships -- a second copy of a library the server already has
-> breaks the Quarkus build at startup.
+!!! note
+
+    1.3.0 requires Keycloak 26.7.x. The OID4VCI signing SPI was
+    rewritten after 26.4, and the plugin's `provided` dependency set is pinned to
+    what that server ships -- a second copy of a library the server already has
+    breaks the Quarkus build at startup.
 
 Add the plugin via an init container in the Keycloak configuration:
 
@@ -314,14 +322,14 @@ keycloak:
           mountPath: /target
 ```
 
-See the [k3s/consumer-eidas.yaml](../../../k3s/consumer-eidas.yaml) overlay
+See the [k3s/consumer-eidas.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-eidas.yaml) overlay
 for the complete init container, volume, and volume-mount configuration.
 
 ### Keystore Volume Mount
 
 The eIDAS signing keystore must be mounted into the Keycloak container.
 The chart's
-[elsi-secret.yaml](../../../charts/data-space-connector/templates/elsi-secret.yaml)
+[elsi-secret.yaml](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/templates/elsi-secret.yaml)
 template creates the Secret from the `elsi.keystore` values. It is then
 mounted via Keycloak's `extraVolumeMounts` and `extraVolumes`:
 
@@ -337,11 +345,13 @@ keycloak:
         defaultMode: 0755
 ```
 
-> **Important:** The `mountPath` must match your realm name --
-> `/opt/keycloak/data/<your-realm-name>/`. The example above uses
-> `test-realm`. If your realm is named differently (e.g., `my-realm`),
-> change the path to `/opt/keycloak/data/my-realm`. This is a KC 26.6.4
-> restriction -- the `java-keystore` provider only reads from that path.
+!!! important
+
+    The `mountPath` must match your realm name --
+    `/opt/keycloak/data/<your-realm-name>/`. The example above uses
+    `test-realm`. If your realm is named differently (e.g., `my-realm`),
+    change the path to `/opt/keycloak/data/my-realm`. This is a KC 26.6.4
+    restriction -- the `java-keystore` provider only reads from that path.
 
 ---
 
@@ -394,13 +404,15 @@ generated using the [FIWARE/eIDAS tool](https://github.com/FIWARE/eIDAS).
    openssl x509 -in output/ca/certs/cacert.pem -outform DER | base64 -w0
    ```
 
-> **Note:** In production VCVerifier builds its trust store from the official
-> EU Trusted Lists and needs nothing from this tool on the provider side. A
-> local deployment is different: the generated CA is self-signed and therefore
-> in no national trust list, so the root certificate has to be placed in a mock
-> trust list -- see [Mocking the EU Trusted List](#mocking-the-eu-trusted-list-local-only).
-> The CRL (`crl.pem`) is still not needed, since local deployments run with
-> `revocationCheck: "off"`.
+!!! note
+
+    In production VCVerifier builds its trust store from the official
+    EU Trusted Lists and needs nothing from this tool on the provider side. A
+    local deployment is different: the generated CA is self-signed and therefore
+    in no national trust list, so the root certificate has to be placed in a mock
+    trust list -- see [Mocking the EU Trusted List](#mocking-the-eu-trusted-list-local-only).
+    The CRL (`crl.pem`) is still not needed, since local deployments run with
+    `revocationCheck: "off"`.
 
 ### Certificate Requirements
 
@@ -501,9 +513,11 @@ shorter chain is not a problem. The local overlay forces JAdES because the
 signing time is part of what makes the signature an eIDAS advanced electronic
 signature.
 
-> **Note:** `jades.enabled` is **not** a `vc.`-prefixed Keycloak credential
-> attribute -- the plugin reads it raw. The chart keeps it unprefixed for that
-> reason; see `dsc.vcScopeUnprefixedAttributes` in `_realm.tpl`.
+!!! note
+
+    `jades.enabled` is **not** a `vc.`-prefixed Keycloak credential
+    attribute -- the plugin reads it raw. The chart keeps it unprefixed for that
+    reason; see `dsc.vcScopeUnprefixedAttributes` in `_realm.tpl`.
 
 ---
 
@@ -562,8 +576,8 @@ mvn clean deploy -Plocal,eidas
 ```
 
 This uses the Maven `eidas` profile, which applies the
-[k3s/provider-eidas.yaml](../../../k3s/provider-eidas.yaml) and
-[k3s/consumer-eidas.yaml](../../../k3s/consumer-eidas.yaml) overlay files on
+[k3s/provider-eidas.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider-eidas.yaml) and
+[k3s/consumer-eidas.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-eidas.yaml) overlay files on
 top of the base configuration.
 
 All commands below go through the squid proxy the local deployment brings
@@ -590,7 +604,7 @@ qualified CA. The eIDAS overlay ships one:
 | `tl-de.xml` | National list (territory `DE`) carrying the test CA as `CA/QC`, status `granted` |
 
 Both live as ConfigMap entries in the `extraManifests` block at the end of
-[k3s/provider-eidas.yaml](../../../k3s/provider-eidas.yaml) -- that is the only
+[k3s/provider-eidas.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider-eidas.yaml) -- that is the only
 copy, so edit them there. A small static web server defined in the same block
 serves them in-cluster, and the verifier is pointed at it:
 
@@ -614,10 +628,12 @@ openssl x509 -in output/ca/certs/cacert.pem -outform DER | base64 -w0
 VCVerifier does not verify the XMLDSig signature on trust lists -- a documented
 limitation of its `eidas` package -- so the mock is served unsigned.
 
-> **Never point a production deployment at a mock trust list.** It declares an
-> arbitrary CA qualified, which removes the entire assurance that eIDAS
-> validation exists to provide. Production leaves `lotlUrl` unset so the
-> official EU LOTL is used.
+!!! warning
+
+    **Never point a production deployment at a mock trust list.** It declares an
+    arbitrary CA qualified, which removes the entire assurance that eIDAS
+    validation exists to provide. Production leaves `lotlUrl` unset so the
+    official EU LOTL is used.
 
 ---
 
@@ -626,7 +642,7 @@ limitation of its `eidas` package -- so the mock is served unsigned.
 This walks an eIDAS credential end to end: the consumer's Keycloak issues a
 credential signed with an eIDAS certificate, and the provider's VCVerifier
 accepts it after validating the `x5c` chain. It is the standard OID4VP flow
-from [LOCAL.MD](../local-deployment/LOCAL.MD#demo-interactions) -- the
+from [LOCAL.md](../local-deployment/LOCAL.md#demo-interactions) -- the
 eIDAS-specific parts are steps 3 and 4.
 
 ### 1. Confirm the verifier started
@@ -761,7 +777,7 @@ chain0.pem: OK
 
 A simpler equivalent: the root in the credential's `x5c[-1]` must be
 byte-identical to the certificate in
-the `tl-de.xml` entry of [k3s/provider-eidas.yaml](../../../k3s/provider-eidas.yaml). If they differ,
+the `tl-de.xml` entry of [k3s/provider-eidas.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider-eidas.yaml). If they differ,
 the trust list was built from a different run of the certificate tool than the
 keystore in `k3s/consumer-eidas.yaml`, and the verifier rejects the credential
 with `certificate does not chain to any trusted service`.
@@ -851,8 +867,8 @@ matched the `did:elsi` issuer, and the provider's policy granted access.
 
 > The entity and the access policy have to exist for this step. Creating them
 > is not eIDAS-specific -- see
-> [The Data Provider](../local-deployment/LOCAL.MD#the-data-provider) in
-> `LOCAL.MD`.
+> [The Data Provider](../local-deployment/LOCAL.md#the-data-provider) in
+> `LOCAL.md`.
 
 ### 8. Confirm that validation actually bites
 

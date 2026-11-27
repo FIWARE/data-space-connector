@@ -2,44 +2,46 @@
 
 In order to be compatible with common european frameworks for Dataspaces, the FIWARE Data Space Connector provides integrations with the [Gaia-X Trustframework](https://gaia-x.gitlab.io/policy-rules-committee/trust-framework/). 
 
-> :warning: The FIWARE Data Space Connector is not supporting the full Gaia-X Trustframework. While a number of features is still under development(see [Ongoing-Work](./ONGOING_WORK.md)), others (like ```did:web``` for Verifiable Presentations) are not enforced in order to keep it more flexible. If strict support is required, users need to ensure that holders are also using ```did:web``` based identities, instead of the default ```did:key```
+!!! warning
+
+    The FIWARE Data Space Connector is not supporting the full Gaia-X Trustframework. While a number of features is still under development(see [Ongoing-Work](./ONGOING_WORK.md)), others (like ```did:web``` for Verifiable Presentations) are not enforced in order to keep it more flexible. If strict support is required, users need to ensure that holders are also using ```did:web``` based identities, instead of the default ```did:key```
 
 ## Gaia-X Digital Clearing Houses as Trusted Issuers Registry
 
-The FIWARE Data Space Connector requires at least one Trusted Issuers Registry as its [Trust Anchor](./deployment-integration/local-deployment/LOCAL.MD#the-trust-anchor). While one of the options is the usage of an [EBSI-Trusted Issuers Registry compatible service](https://hub.ebsi.eu/api/core/issuers-registry), its also possible to rely on [Gaia-X Digital Clearing Houses(GDCH)](https://gaia-x.eu/services-deliverables/digital-clearing-house/). 
+The FIWARE Data Space Connector requires at least one Trusted Issuers Registry as its [Trust Anchor](./deployment-integration/local-deployment/LOCAL.md#the-trust-anchor). While one of the options is the usage of an [EBSI-Trusted Issuers Registry compatible service](https://hub.ebsi.eu/api/core/issuers-registry), its also possible to rely on [Gaia-X Digital Clearing Houses(GDCH)](https://gaia-x.eu/services-deliverables/digital-clearing-house/). 
 As part of its mandatory components, each GDCH has to provide a [Gaia-X Registry Service](https://docs.gaia-x.eu/technical-committee/architecture-document/24.04/gx_services/#gaia-x-registry). The registry-service is responsible for storing the Trust Anchors accepted by the Gaia-X Trust Framework and provides an [API](https://registry.lab.gaia-x.eu/v2/docs/) that can be used for verifying such trust chains. 
 
 Since Gaia-X supports [did:web as schema for credentials issuers](https://gitlab.com/gaia-x/technical-committee/identity-credentials-and-access-management-working-group/icam/-/blob/main/docs/credential_format.md#issuers), an integration with the FIWARE Data Space Connector can be achieved by just using such identity for the participant. Thus, when a participant is registered with a Gaia-X compatible ```did:web``` in the Data Space and the [Verifier is configured to use a Gaia-X registry](https://github.com/FIWARE/VCVerifier?tab=readme-ov-file#gaia-x-registry), a GDCH can be used as participants registry.
 
 ### Demo Usage
 
-A demonstrational support for integration of the Gaia-X Digital Clearing House is provided as part of the [Local-Deployment](./deployment-integration/local-deployment/LOCAL.MD). As a deviation from the default-example(using did:key for the consumer), the ```gaia-x``` profile has to be used to create a local-resolvable, gaia-x compliant ```did:web``` and a local instance of a GDCH.
+A demonstrational support for integration of the Gaia-X Digital Clearing House is provided as part of the [Local-Deployment](./deployment-integration/local-deployment/LOCAL.md). As a deviation from the default-example(using did:key for the consumer), the ```gaia-x``` profile has to be used to create a local-resolvable, gaia-x compliant ```did:web``` and a local instance of a GDCH.
 
 To run the local setup:
 ```shell
       mvn clean deploy -Plocal,gaia-x
 ```
 
-Once the system started, all flows described for the [local setup](./deployment-integration/local-deployment/LOCAL.MD#the-data-space) can be executed. 
+Once the system started, all flows described for the [local setup](./deployment-integration/local-deployment/LOCAL.md#the-data-space) can be executed. 
 
 #### Differences to local deployment
 
 In order to have a valid ```did:web``` available inside the local environment, a proper certificate chain has to be generated. This can be done with the scripts available in the [helpers/certs/-folder](https://github.com/FIWARE/data-space-connector/tree/2a01e88369941f893ad4474c5e55a69ab3b6471a/helpers/certs). When executed, the will create a Root-CA, an Intermediate-CA and a Client-Certificate, containing the identity of our demo-consumer ```did:web:fancy-marketplace.biz```. The script will also take care to distribute the secrets and certificates through the k3s configuration:
 
-* the client-certificate private-key and the certificate-chain as a java-keystore to the [Consumers Keycloak Deployment](../k3s/consumer/), in order to properly sign credentials
-* the certificate chain as a tls-secrets to the [Treafik Deployment](../k3s/infra/traefik/) to be used as TLS Certificate on the Ingress
-* the Root-CA's keypair as a secret for the [gx-registry Deployment](../k3s/gaia-x-infra/gx-registry/), to be used as trust-anchor of the GDCH
-* the Root-CA as a secret for the [Provider](../k3s/provider/) to allow import into the Verifiers Trust-Store for trusting the certificates
+* the client-certificate private-key and the certificate-chain as a java-keystore to the [Consumers Keycloak Deployment](https://github.com/FIWARE/data-space-connector/tree/main/k3s/consumer), in order to properly sign credentials
+* the certificate chain as a tls-secrets to the [Treafik Deployment](https://github.com/FIWARE/data-space-connector/tree/main/k3s/infra/traefik) to be used as TLS Certificate on the Ingress
+* the Root-CA's keypair as a secret for the [gx-registry Deployment](https://github.com/FIWARE/data-space-connector/tree/main/k3s/gaia-x-infra/gx-registry), to be used as trust-anchor of the GDCH
+* the Root-CA as a secret for the [Provider](https://github.com/FIWARE/data-space-connector/tree/main/k3s/provider) to allow import into the Verifiers Trust-Store for trusting the certificates
 * the certificate chain as a secret to the [Consumer] to allow its publication as part of the did.json-document
-* the Root-CA as a an env-var for the [registries init-container](../k3s/gaia-x-infra/gx-registry/deployment-registry.yaml) to be inserted in the [Trust-Anchors List](../helpers/gaiax-local-trust/README.md)
-* the client-certs modulus and exponent for the [values.yaml](../k3s/consumer-gaia-x.yaml) to allow its publication as part of the did.json-document
+* the Root-CA as a an env-var for the [registries init-container](https://github.com/FIWARE/data-space-connector/blob/main/k3s/gaia-x-infra/gx-registry/deployment-registry.yaml) to be inserted in the [Trust-Anchors List](https://github.com/FIWARE/data-space-connector/blob/main/helpers/gaiax-local-trust/README.md)
+* the client-certs modulus and exponent for the [values.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-gaia-x.yaml) to allow its publication as part of the did.json-document
 
 In addition to create the ```did:web``` some more infrastructure changes are required to support proper resolution of the did. According to the [spec](https://w3c-ccg.github.io/did-method-web/), a did.json document needs to be made available at a well-known endpoint(in case of the demo-consumer that would be `fancy-marketplace.biz/.well-known/did.json`) through https. To support the required dns-resolution and local certificates for the Verifier and Gaia-X Registry Service, a proxy solution is integrated with the local deployment:
 
 ![Proxy-Setup](./img/proxy-setup.png)
 
-While [Traefik](../k3s/infra/traefik/) still acts as the [Ingress-Controller](https://kubernetes.io/docs/concepts/services-networking/ingress-controllers/), it now also offers an ```https``` endpoint, using the previously created certificate for all configured endpoints. Certificate support can be enabled at Ingress-Level with the annotation ```traefik.ingress.kubernetes.io/router.tls: "true"```. With that, our did-document could be addressed through Traefik by explicitly using the ssl-port(8443). However, to be compliant with the spec, there needs to be a way to support access by directly using ```https://fancy-marketplace.biz/.well-known/did.json```. 
-For that, [Squid](../k3s/infra/squid/) is deployed and configured as an (Https-)Forward-Proxy, using Treafik as a Cache-Peer. By doing so, Squid will forward all request that are proxied through it(achievable in the Verifier and GX-Registry by using the HTTP(|S)_PROXY env var) to Treafik and allows it to be resolved through its internal mechanisms.
+While [Traefik](https://github.com/FIWARE/data-space-connector/tree/main/k3s/infra/traefik) still acts as the [Ingress-Controller](https://kubernetes.io/docs/concepts/services-networking/ingress-controllers/), it now also offers an ```https``` endpoint, using the previously created certificate for all configured endpoints. Certificate support can be enabled at Ingress-Level with the annotation ```traefik.ingress.kubernetes.io/router.tls: "true"```. With that, our did-document could be addressed through Traefik by explicitly using the ssl-port(8443). However, to be compliant with the spec, there needs to be a way to support access by directly using ```https://fancy-marketplace.biz/.well-known/did.json```. 
+For that, [Squid](https://github.com/FIWARE/data-space-connector/tree/main/k3s/infra/squid) is deployed and configured as an (Https-)Forward-Proxy, using Treafik as a Cache-Peer. By doing so, Squid will forward all request that are proxied through it(achievable in the Verifier and GX-Registry by using the HTTP(|S)_PROXY env var) to Treafik and allows it to be resolved through its internal mechanisms.
 The proxy can also be used for locally accessing the document:
 
 ```shell
@@ -101,7 +103,9 @@ Not supported:
 
 Policies can be created at the [ODRL-PAP](https://github.com/wistefan/odrl-pap). 
 
-> :bulb: The following examples use the [local-deployment of the connector](./deployment-integration/local-deployment/LOCAL.MD). However, all of them can be run on any other installation of the Data Space Connector.
+!!! tip
+
+    The following examples use the [local-deployment of the connector](./deployment-integration/local-deployment/LOCAL.md). However, all of them can be run on any other installation of the Data Space Connector.
 
 The policy would allow any caller providing a Verifiable Credential with the the ```credentialSubject.type``` being ```gx:LegalParticipant``` and containing a claim ```credentialSubject.gx:legalAddress.gx:countrySubdivisionCode``` with the value either being ```FR-HDF``` or ```BE-BRU``` to read the entity with the id ```my-secured-object``` .
 
