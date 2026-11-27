@@ -330,3 +330,60 @@ func TestRenderInfrastructureReload(t *testing.T) {
 		})
 	}
 }
+
+// TestAnswerListsSkipInfrastructure pins that Stage 3's and Review's answer lists never name a synthetic infra.* id,
+// whether its mode is chosen or not: those answers belong to Stage 4.
+func TestAnswerListsSkipInfrastructure(t *testing.T) {
+	const (
+		otherBase   = "other.org"
+		staleSecret = "kc"
+	)
+	b := infraBundle(t)
+	stale := map[string]any{"secret.keycloak": staleSecret, "issuer": infraIssuer}
+	tests := []struct {
+		name string
+		mode string
+	}{
+		{"no mode chosen", ""},
+		{"inactive external answers", model.ModeCluster},
+		{"active external answers", model.ModeExternal},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			answers := stale
+			if tc.mode == "" {
+				answers = nil
+			}
+			prev := infraProfile(tc.mode, answers)
+			prev.Model = profile.ModelRef{Chart: b.Chart, Version: b.Version}
+			next := prev
+			next.Answers = map[string]any{domainBase: otherBase}
+			hand, err := HandSet(b, next)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, h := range hand {
+				if model.IsInfraID(h.ID) {
+					t.Errorf("HandSet lists %s", h.ID)
+				}
+			}
+			diff, err := DerivedDiff(b, prev, next)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, c := range diff.Rederived {
+				if model.IsInfraID(c.ID) {
+					t.Errorf("Rederived lists %s", c.ID)
+				}
+			}
+			for _, p := range diff.Pinned {
+				if model.IsInfraID(p.ID) {
+					t.Errorf("Pinned lists %s", p.ID)
+				}
+			}
+			if !slices.ContainsFunc(diff.Rederived, func(c DerivedChange) bool { return c.ID == hostKeycloak }) {
+				t.Errorf("Rederived = %+v, want %s", diff.Rederived, hostKeycloak)
+			}
+		})
+	}
+}

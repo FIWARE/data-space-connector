@@ -500,7 +500,7 @@ func addressable(field string, fs []CompiledFoundation) (Stage, []string, error)
 		return t.stage, t.values, nil
 	}
 	id, isAnswer := strings.CutPrefix(field, AnswerFieldPrefix)
-	if isAnswer && isInfraID(id) {
+	if isAnswer && IsInfraID(id) {
 		return "", nil, fmt.Errorf("%q: an infrastructure answer is addressed as %s<dependency>[.<question>]", field, InfrastructureFieldPrefix)
 	}
 	infra, isInfra := infraFieldID(field)

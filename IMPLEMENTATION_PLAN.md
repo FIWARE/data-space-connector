@@ -347,6 +347,8 @@ Code only, tested against fixture bundles. The shipped bundle does not change ye
     `external` shows one row per ingress (label, Secret name);
   - *Ask later* (`chrome/AskLater.tsx`) on the mode and on each question, using the open ids from Step 2;
   - an optional "writes" disclosure listing the mode's keys.
+  - Decide whether Stage 3's "writes" disclosure should keep listing the per-ingress cert-manager keys: `render.Targets`
+    of a host (or `domain.base`) reaches them through the expanded targets' `requires` (review of PR #52).
 
   UI copy that is not bundle data goes into `ui/src/stages/infrastructureText.ts`, like the other `*Text.ts` files.
 - `ui/src/state/issues.ts` counts these as Stage 4 open questions: an unchosen mode, plus the unanswered questions

@@ -38,7 +38,8 @@ keep working without a second engine.
 
 The synthetic foundations are in `Bundle.CompiledFoundations()`, `FoundationOrder()` and `Foundation(id)`, but never in
 the declared `b.Foundations`, which is Stage 3's list. Every caller that ranges over foundations chooses which list it
-means.
+means. The answer lists of Stage 3 and Review (`render.HandSet`, `render.DerivedDiff`) are keyed by `answers.<id>`, so
+they skip `infra.*` ids (`model.IsInfraID`), whether the mode is chosen or not.
 
 Ids are one `idSegment` each: dependency (`certManager`, not `cert-manager`), question and ingress. Only the per-ingress
 expansion produces a two-segment local id. Uniqueness across modes, the reserved id `mode` and the nesting check run on

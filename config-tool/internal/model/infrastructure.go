@@ -148,8 +148,8 @@ func InfraQuestionID(dep, question string) string {
 	return InfraIDPrefix + dep + idSeparator + question
 }
 
-// isInfraID reports whether id is, or lies under, the reserved infra namespace.
-func isInfraID(id string) bool {
+// IsInfraID reports whether id is, or lies under, the reserved infra namespace of the synthetic foundations.
+func IsInfraID(id string) bool {
 	return id == strings.TrimSuffix(InfraIDPrefix, idSeparator) || strings.HasPrefix(id, InfraIDPrefix)
 }
 
@@ -172,7 +172,7 @@ type ingressRow struct {
 // re-checks them together with the declared ones, which must stay out of the infra namespace.
 func compileInfrastructure(b *Bundle) error {
 	for i, f := range b.Foundations {
-		if isInfraID(f.ID) {
+		if IsInfraID(f.ID) {
 			return fmt.Errorf("foundations[%d]: id %q lies under %s, which only the infrastructure list compiles", i, f.ID, InfraIDPrefix)
 		}
 	}
