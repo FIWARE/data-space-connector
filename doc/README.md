@@ -25,6 +25,7 @@ specific flows and its deployment and integration with other frameworks.
   - [Local Deployment (Maven)](#local-deployment-maven)
   - [Packet Delivery Company (ArgoCD)](#packet-delivery-company-argocd)
   - [Running the EDC identity material in production](#running-the-edc-identity-material-in-production)
+  - [Several dataspaces in one connector](#several-dataspaces-in-one-connector)
   - [Observability](#observability)
   - [eIDAS 2.0 Compliance](#eidas-20-compliance)
   - [Integration with AWS Garnet Framework (formerly AWS Smart Territory Framework)](#integration-with-aws-garnet-framework-formerly-aws-smart-territory-framework)
