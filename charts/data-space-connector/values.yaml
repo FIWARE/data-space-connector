@@ -3881,10 +3881,15 @@ tracing:
     python:
       # -- container image for the Python auto-instrumentation agent init
       # container injected by the Operator. The agent runs in the application's own Python, so
-      # it has to support its version: 0.62b1 is the last one for Python 3.9 (0.63b0 and later
-      # require 3.10). The marketplace charging backend runs Python 3.9 from 11.8.3 on, and
-      # Python 3.8 before, for which no agent is published any more.
-      image: "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:0.62b1"
+      # it has to work with its version: the marketplace charging backend runs Python 3.9, and
+      # 0.61b0 is the last image whose bundled libraries still load on it (0.62b1 ships a
+      # urllib3 that needs Python 3.10).
+      image: "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:0.61b0"
+      # -- OTLP/HTTP endpoint the Python agent exports to. The Operator's Python agent ships no
+      # gRPC exporter, so it always uses `http/protobuf`; the default targets port 4318 of the
+      # bundled collector (`http://<release>-opentelemetry-collector:4318`). Set it when
+      # `tracing.exporter.otlp.endpoint` points to another collector.
+      endpoint: ""
     # -- Node.js auto-instrumentation agent settings.
     nodejs:
       # -- container image for the Node.js auto-instrumentation agent init
