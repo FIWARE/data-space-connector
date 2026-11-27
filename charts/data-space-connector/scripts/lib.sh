@@ -50,6 +50,14 @@ vault_put() {
 # base64(participantContextId).secret, looking that participant up, reading the alias in its
 # participant_context.api_token_alias column and comparing the WHOLE presented token against
 # the value stored in vault under that alias.
+# API_KEY is the secret half of that token, as DSP_INTEGRATION.md exports it. The chart maps it
+# from identityhub.superuser.key, which the identityhub itself takes as the WHOLE token in
+# EDC_IH_API_SUPERUSER_KEY - so when it already carries the prefix, prefixing it again would
+# present base64(id).base64(id).secret and every call would answer "Invalid API token".
 superuser_token() {
-  printf '%s.%s' "$(printf '%s' "${SUPERUSER_ID}" | base64 | tr -d '\n')" "${API_KEY}"
+  _prefix="$(printf '%s' "${SUPERUSER_ID}" | base64 | tr -d '\n')"
+  case "${API_KEY}" in
+    "${_prefix}".*) printf '%s' "${API_KEY}" ;;
+    *) printf '%s.%s' "${_prefix}" "${API_KEY}" ;;
+  esac
 }

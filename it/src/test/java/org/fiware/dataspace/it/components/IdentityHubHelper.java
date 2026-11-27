@@ -76,6 +76,11 @@ public class IdentityHubHelper {
      */
     private static final MediaType JSON = MediaType.parse("application/json");
 
+    /**
+     * Status the IdentityHub answers with when a credential of that id is already stored.
+     */
+    private static final int HTTP_CONFLICT = 409;
+
     private static final OkHttpClient HTTP_CLIENT = OK_HTTP_CLIENT;
 
     private IdentityHubHelper() {
@@ -183,22 +188,73 @@ public class IdentityHubHelper {
         payload.put("participantContextId", participantId);
         payload.set("verifiableCredentialContainer", container);
 
-        RequestBody body = RequestBody.create(OBJECT_MAPPER.writeValueAsString(payload), JSON);
+        String payloadJson = OBJECT_MAPPER.writeValueAsString(payload);
         String url = identityHubManagementAddress + PARTICIPANTS_API_PATH + "/" + encodedParticipantId + "/credentials";
+
+        String failure = postCredential(url, payloadJson);
+        // The chart provisions the same credential id through the credential-sync sidecar
+        // (identityhub.credentialSync, enabled in k3s/dsp-*.yaml), so a copy may already be stored
+        // by the time the test inserts its own. Replace it, exactly as the sidecar's
+        // charts/data-space-connector/scripts/sync-credential.sh does on a 409.
+        if (failure == null) {
+            log.debug("Successfully inserted credential '{}' for participant '{}' at {}",
+                    credentialId, participantId, identityHubManagementAddress);
+            return;
+        }
+        if (failure.startsWith(String.valueOf(HTTP_CONFLICT))) {
+            log.debug("Credential '{}' already stored for '{}' - replacing it.", credentialId, participantId);
+            deleteCredential(url, credentialId);
+            failure = postCredential(url, payloadJson);
+        }
+        assertTrue(failure == null,
+                String.format("Credential insertion should succeed. Got %s", failure));
+        log.debug("Successfully inserted credential '{}' for participant '{}' at {}",
+                credentialId, participantId, identityHubManagementAddress);
+    }
+
+    /**
+     * Posts a credential to the IdentityHub credentials endpoint.
+     *
+     * @param url         the participant's credentials endpoint
+     * @param payloadJson the credential payload
+     * @return {@code null} on success, otherwise "{@code <status>: <body>}" for the assertion message
+     * @throws Exception if the HTTP request fails
+     */
+    private static String postCredential(String url, String payloadJson) throws Exception {
         Request request = new Request.Builder()
                 .url(url)
-                .post(body)
+                .post(RequestBody.create(payloadJson, JSON))
                 .header("Accept", "*/*")
                 .header("x-api-key", IDENTITY_HUB_API_KEY)
                 .header("Content-Type", "application/json")
                 .build();
+        try (Response response = HTTP_CLIENT.newCall(request).execute()) {
+            if (response.isSuccessful()) {
+                return null;
+            }
+            return String.format("%d: %s", response.code(),
+                    response.body() != null ? response.body().string() : "no body");
+        }
+    }
 
+    /**
+     * Removes a stored credential, so that it can be inserted again.
+     *
+     * @param url          the participant's credentials endpoint
+     * @param credentialId the credential identifier to delete
+     * @throws Exception if the HTTP request fails or returns a non-success status
+     */
+    private static void deleteCredential(String url, String credentialId) throws Exception {
+        Request request = new Request.Builder()
+                .url(url + "/" + credentialId)
+                .delete()
+                .header("Accept", "*/*")
+                .header("x-api-key", IDENTITY_HUB_API_KEY)
+                .build();
         try (Response response = HTTP_CLIENT.newCall(request).execute()) {
             assertTrue(response.isSuccessful(),
-                    String.format("Credential insertion should succeed. Got status %d: %s",
+                    String.format("Deleting the stored credential should succeed. Got status %d: %s",
                             response.code(), response.body() != null ? response.body().string() : "no body"));
-            log.debug("Successfully inserted credential '{}' for participant '{}' at {}",
-                    credentialId, participantId, identityHubManagementAddress);
         }
     }
 

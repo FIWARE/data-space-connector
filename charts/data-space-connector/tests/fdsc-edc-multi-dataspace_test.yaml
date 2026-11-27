@@ -49,7 +49,7 @@ set:
             fdsc.participants.b.config.edc.iam.sts.oauth.client.id=did:web:dataspace-b.example.org\n    \
             fdsc.participants.b.config.edc.iam.sts.oauth.client.secret.alias=did:web:dataspace-b.example.org-sts-client-secret\n    \
             tmfExtension.defaultParticipantContextId=did:web:dataspace-a.example.org\n    \
-            tmfExtension.schemaBaseUri=https://raw.githubusercontent.com/SEAMWARE/fdsc-edc/2.1.0/schemas/\n    \
+            tmfExtension.schemaBaseUri=https://raw.githubusercontent.com/SEAMWARE/fdsc-edc/2.1.1/schemas/\n    \
             edc.iam.oauth2.issuer=https://keycloak.example.org/realms/dsc\n    \
             edc.iam.oauth2.jwks.url=http://keycloak.dsc.svc.cluster.local:8080/realms/dsc/protocol/openid-connect/certs"
       oid4vc:
@@ -140,7 +140,7 @@ tests:
     asserts:
       - equal:
           path: *controlplane
-          value: quay.io/seamware/fdsc-edc-controlplane-dcp:2.1.0
+          value: quay.io/seamware/fdsc-edc-controlplane-dcp:2.1.1
 
   - it: runs the oid4vc deployment on the pinned fdsc-edc image when it sets no tag
     template: charts/fdsc-edc/templates/deployment.yaml
@@ -150,4 +150,4 @@ tests:
     asserts:
       - equal:
           path: *controlplane
-          value: quay.io/seamware/fdsc-edc-controlplane-oid4vc:2.1.0
+          value: quay.io/seamware/fdsc-edc-controlplane-oid4vc:2.1.1

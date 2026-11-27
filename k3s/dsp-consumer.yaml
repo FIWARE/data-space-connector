@@ -37,7 +37,7 @@ fdsc-edc:
           fdsc.participants.self.config.edc.iam.sts.oauth.client.id=did:web:fancy-marketplace.biz\n    \
           fdsc.participants.self.config.edc.iam.sts.oauth.client.secret.alias=did:web:fancy-marketplace.biz-sts-client-secret\n    \
           tmfExtension.defaultParticipantContextId=did:web:fancy-marketplace.biz\n    \
-          tmfExtension.schemaBaseUri=https://raw.githubusercontent.com/SEAMWARE/fdsc-edc/2.1.0/schemas/\n    \
+          tmfExtension.schemaBaseUri=https://raw.githubusercontent.com/SEAMWARE/fdsc-edc/2.1.1/schemas/\n    \
           edc.iam.oauth2.issuer=https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm\n    \
           edc.iam.oauth2.jwks.url=http://consumer-keycloak.consumer.svc.cluster.local:8080/realms/test-realm/protocol/openid-connect/certs"
     oid4vc:
@@ -169,7 +169,9 @@ fdsc-edc:
         trustAll: true
         holder:
           id: did:web:fancy-marketplace.biz
-          kid: did:web:fancy-marketplace.biz
+          # the fragment the identityhub publishes the key under; a counterparty resolves the DID
+          # document and rejects anything signed with a kid that is not in it
+          kid: did:web:fancy-marketplace.biz#key-1
           key:
             path: /signing-key/tls.key
         proxy:
@@ -270,9 +272,52 @@ identityhub:
       authKeyAlias: "sup3r$3cr3t"
   superuser:
     key: c3VwZXItdXNlcg==.random
+  # Provisioning of the participant: the key in vault, the participant context with its
+  # CredentialService endpoint and the STS client secret the DCP controlplane reads under
+  # `<did>-sts-client-secret`. Without it the identityhub is inert and every DCP flow fails with
+  # "Failed to fetch client secret from the vault with alias: ...", so the demo flows of
+  # doc/MULTI_DATASPACE.md need it. The Job is a post-install/post-upgrade hook and idempotent;
+  # vault runs in dev mode here, so a vault restart needs the next deploy to put the state back.
+  bootstrap:
+    enabled: true
+    did: did:web:fancy-marketplace.biz
+    keyAlias: key-1
+    # published in the DID document, so it has to resolve from outside the cluster
+    credentialServiceUrl: https://identityhub-fancy-marketplace.127.0.0.1.nip.io
+    identityKey:
+      secretName: fancy-marketplace.biz-tls
+      key: tls.key
+      algorithm: EC
+    stsClientSecret:
+      existingSecret: identityhub-sts-client-secret
+      existingSecretKey: sts-client-secret
+  # Mirrors the membership credential the vc-operator requests from Keycloak into the participant
+  # context. The bootstrap only creates the context; a context without a credential presents
+  # nothing and is rejected by every counterparty.
+  credentialSync:
+    enabled: true
+    secretName: vc-fdsc-edc-credential
+    key: credential
+    id: membership-credential
   env:
     JAVA_TOOL_OPTIONS: -Dhttps.proxyHost=squid-proxy.infra.svc.cluster.local -Dhttps.proxyPort=8888 -Dhttp.proxyHost=squid-proxy.infra.svc.cluster.local -Dhttp.proxyPort=8888 -Dhttp.nonProxyHosts="*-vault|*.cluster.local|odrl-pap|trusted-issuers-list|contract-management" -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
 
 # required to provide the secrets for identity hub
 vault:
   enabled: true
+
+# STS client secret shared between the DCP controlplane's oauth client and the identityhub's
+# embedded STS. Both sides only compare against the copy the bootstrap writes to vault, so the
+# value is free to choose - which is what makes the bootstrap repeatable, unlike the secret the
+# identityhub generates once and never reveals again.
+extraManifests:
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+      name: identityhub-sts-client-secret
+      # the template deploy path applies the render with kubectl and without a namespace, so an
+      # extra manifest that does not name one lands in `default`
+      namespace: "{{ .Release.Namespace }}"
+    type: Opaque
+    stringData:
+      sts-client-secret: local-demo-sts-client-secret

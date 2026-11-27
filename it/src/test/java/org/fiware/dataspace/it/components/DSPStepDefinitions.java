@@ -2424,7 +2424,7 @@ public class DSPStepDefinitions extends StepDefintions {
 
         ObjectNode permission = OBJECT_MAPPER.createObjectNode();
         permission.put("action", "use");
-        permission.set("constraint", constraint);
+        permission.set("constraint", constraintArray(constraint));
 
         ArrayNode permissions = OBJECT_MAPPER.createArrayNode();
         permissions.add(permission);
@@ -2636,7 +2636,7 @@ public class DSPStepDefinitions extends StepDefintions {
         dowRightOperand.put("@value", 6);
         dowRightOperand.put("@type", "xsd:integer");
         dowConstraint.set("rightOperand", dowRightOperand);
-        transferPerm.set("constraint", dowConstraint);
+        transferPerm.set("constraint", constraintArray(dowConstraint));
         permissions.add(transferPerm);
 
         // membershipType == "FullMember" scoped to contract.negotiation
@@ -2647,7 +2647,7 @@ public class DSPStepDefinitions extends StepDefintions {
         memberConstraint.put("leftOperand", "dspace:membershipType");
         memberConstraint.put("operator", "eq");
         memberConstraint.put("rightOperand", "FullMember");
-        negotiationPerm.set("constraint", memberConstraint);
+        negotiationPerm.set("constraint", constraintArray(memberConstraint));
         permissions.add(negotiationPerm);
 
         policy.set("permission", permissions);
@@ -2807,6 +2807,21 @@ public class DSPStepDefinitions extends StepDefintions {
      * @param offerId the offer ID extracted from the catalog
      * @return the policy as an ObjectNode
      */
+    /**
+     * Wraps ODRL constraints in the array the v5beta management API expects.
+     * A bare object is refused with "object found, array expected"; the provider catalog
+     * advertises the same permissions with an array, so a consumer has to echo that shape.
+     *
+     * @param constraints the constraints of one permission, in order
+     */
+    private static ArrayNode constraintArray(ObjectNode... constraints) {
+        ArrayNode array = OBJECT_MAPPER.createArrayNode();
+        for (ObjectNode constraint : constraints) {
+            array.add(constraint);
+        }
+        return array;
+    }
+
     private ObjectNode buildDcpContractPolicy(String offerId) {
         ObjectNode policy = OBJECT_MAPPER.createObjectNode();
         policy.put("@context", "http://www.w3.org/ns/odrl.jsonld");
@@ -2826,7 +2841,7 @@ public class DSPStepDefinitions extends StepDefintions {
 
         ObjectNode permission = OBJECT_MAPPER.createObjectNode();
         permission.put("action", "use");
-        permission.set("constraint", constraint);
+        permission.set("constraint", constraintArray(constraint));
 
         ArrayNode permissions = OBJECT_MAPPER.createArrayNode();
         permissions.add(permission);

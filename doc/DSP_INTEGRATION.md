@@ -88,7 +88,7 @@ To run the local setup:
   mvn clean deploy -Plocal,dsp
 ```
 
-The following steps will show how to create a ProductOffering throught the TMForum-APIs, buy access to it via TMForum, DSP+OID4VP and DSP+DCP and access the purchased data-service through all 3 methods. It requires a proper setup of Consumer and Provider identities as expected for the DCP, which also works for OID4VP.
+The following steps will show how to create a ProductOffering throught the TMForum-APIs, buy access to it via TMForum, DSP+OID4VP and DSP+DCP and access the purchased data-service through all 3 methods. It requires a proper setup of Consumer and Provider identities as expected for the DCP, which also works for OID4VP. In this scenario the deploy above already did that: `k3s/dsp-provider.yaml` and `k3s/dsp-consumer.yaml` enable `identityhub.bootstrap` and `identityhub.credentialSync`, so both participants come up registered and credentialed, and the identity sections below are a walk-through of what the chart ran rather than steps that still have to be performed.
 
 
 ### Provisioning the participant identities
@@ -120,9 +120,10 @@ controlplane share one id, the DID. The controlplane's STS client reads its secr
 alias `<DID>-sts-client-secret` written here, see
 [Multi-dataspace operation](./MULTI_DATASPACE.md#participant-contexts-and-profiles).
 
-**The manual procedure** is below, and it is what to reach for in a local deployment or when
-debugging. It runs the very same scripts, from a workstation instead of from a Job, so the two paths
-cannot drift apart. (The integration tests are a third thing: they reimplement the steps in Java, in
+**The manual procedure** is below, and it is what to reach for when debugging, or when adding a
+second identity to a connector the chart already bootstrapped (see
+[Multi-dataspace operation](./MULTI_DATASPACE.md#flow-5---a-second-identity-by-hand)). It runs the
+very same scripts, from a workstation instead of from a Job, so the two paths cannot drift apart. (The integration tests are a third thing: they reimplement the steps in Java, in
 `it/src/test/java/.../IdentityHubHelper.java`, because they assert on the intermediate values.)
 
 ### Setup the consumer
@@ -1008,7 +1009,11 @@ curl -k -x localhost:8888 -X POST \
     }' | jq .
 ```
 
-2. Start the negotiation by selecting the offer:
+2. Start the negotiation by selecting the offer. The policy has to repeat the offer as the catalog
+   returned it; `permission[].constraint` is a list there, and the management API answers a bare
+   object with `400 object found, array expected`. Copying the offer out of the catalog response
+   rather than retyping it avoids the whole class of mismatch, which is what
+   [`doc/scripts/dsp-consume.sh`](./scripts/dsp-consume.sh) does:
 ```shell
 curl -k -x localhost:8888 -X POST \
   "${MANAGEMENT_API}/contractnegotiations" \
@@ -1033,21 +1038,21 @@ curl -k -x localhost:8888 -X POST \
             "assigner": "did:web:mp-operations.org",
             "permission": [{
               "action":  "use",
-              "constraint": {
+              "constraint": [{
                 "leftOperand": "odrl:dayOfWeek",
                 "operator": "lt",
                 "rightOperand": {
                   "@value": 6,
                   "@type": "xsd:integer"
                 }
-              }},
+              }]},
               {
                 "action": "use",
-                  "constraint": {
+                  "constraint": [{
                     "leftOperand": "dspace:membershipType",
                     "operator": "eq",
                     "rightOperand": "FullMember"
-                  }
+                  }]
               }
             ],
             "target": "ASSET-1"
@@ -1141,7 +1146,9 @@ DCP scopes and trusted issuers list. Both are reached at
 `https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/did:web:mp-operations.org/<profile>`. To read the
 catalog through the second profile, repeat step 1 with `dsp-fiware-ds2` as both `protocol` and the
 last segment of `counterPartyAddress`. How to declare profiles, attach them to a context, and run a
-second DID in the same connector is described in [Multi-dataspace operation](./MULTI_DATASPACE.md).
+second DID in the same connector is described in [Multi-dataspace operation](./MULTI_DATASPACE.md);
+its [demo flows](./MULTI_DATASPACE.md#demo-flows) walk through profile discovery, routing, the
+catalog through each profile and a full transfer through the second one.
 
 #### Advanced Policy Scenarios
 
@@ -1404,11 +1411,11 @@ curl -k -x localhost:8888 -X POST \
             "assigner": "did:web:mp-operations.org",
             "permission": [{
               "action": "use",
-              "constraint": {
+              "constraint": [{
                 "leftOperand": "dspace:membershipStatus",
                 "operator": "eq",
                 "rightOperand": "premium"
-              }
+              }]
             }],
             "target": "ASSET-3"
         }

@@ -2,20 +2,28 @@
 
 Since chart 11.0.0 the DCP controlplane runs [fdsc-edc](https://github.com/SEAMWARE/fdsc-edc) 2.x.
 One connector can then take part in several dataspaces, each through its own DSP profiles and with
-its own identity if needed. This guide shows how to configure that with the DSC chart. The full key
-reference is upstream in
-[`docs/multi-dataspace.md`](https://github.com/SEAMWARE/fdsc-edc/blob/2.1.0/docs/multi-dataspace.md).
+its own identity if needed. This guide describes what that is for, how to see it work in the local
+demo, and how to configure it with the DSC chart. The full key reference is upstream in
+[`docs/multi-dataspace.md`](https://github.com/SEAMWARE/fdsc-edc/blob/2.1.1/docs/multi-dataspace.md).
 The OID4VC controlplane is not affected by any of this.
 
 <!-- TOC -->
 * [Multi-dataspace operation](#multi-dataspace-operation)
   * [Participant contexts and profiles](#participant-contexts-and-profiles)
-  * [Configuring them in the DSC chart](#configuring-them-in-the-dsc-chart)
+  * [Use cases](#use-cases)
+  * [Demo flows](#demo-flows)
+    * [Starting the scenario](#starting-the-scenario)
+    * [Prerequisites for the manual flows](#prerequisites-for-the-manual-flows)
+    * [Flow 1 - which dataspaces does a context serve?](#flow-1---which-dataspaces-does-a-context-serve)
+    * [Flow 2 - routing happens before authentication](#flow-2---routing-happens-before-authentication)
+    * [Flow 3 - the same catalog through two dataspaces](#flow-3---the-same-catalog-through-two-dataspaces)
+    * [Flow 4 - a full consumer flow through the second dataspace](#flow-4---a-full-consumer-flow-through-the-second-dataspace)
+    * [Flow 5 - a second identity, by hand](#flow-5---a-second-identity-by-hand)
+  * [Configuring contexts and profiles in the DSC chart](#configuring-contexts-and-profiles-in-the-dsc-chart)
   * [One connector, two profiles](#one-connector-two-profiles)
   * [Two dataspaces, two DIDs](#two-dataspaces-two-dids)
   * [Management API](#management-api)
   * [DSP addresses for counterparties](#dsp-addresses-for-counterparties)
-  * [Verification](#verification)
   * [Migrating from 10.x](#migrating-from-10x)
 <!-- TOC -->
 
@@ -34,7 +42,260 @@ The OID4VC controlplane is not affected by any of this.
 There is no legacy mode. A DCP controlplane without a `fdsc.participants.*` entry starts, but every
 DSP route answers 404.
 
-## Configuring them in the DSC chart
+## Use cases
+
+Three things the contexts and profiles of fdsc-edc 2.x make possible, from the most common to the
+rarest:
+
+- **One identity in several dataspaces.** The connector keeps its DID, its identityhub participant,
+  its credentials and its assets, and becomes reachable through one profile per dataspace. Each
+  profile brings its own DCP scopes - the credentials the connector asks its STS for and presents to
+  that dataspace - and its own trusted issuers list, so the dataspaces stay separate in everything
+  that concerns trust, while the catalog, negotiations and transfers behind them are the one
+  context's. This is the common case: joining a second dataspace is then a profile, not a second
+  deployment. The local `dsp` scenario does exactly this, and the demo below walks through it.
+- **An identity per dataspace.** When a dataspace insists on its own identity - a DID it issued, or
+  one whose credentials must not be presentable elsewhere - the connector runs a second participant
+  context. Contexts share nothing: each has its own DID, STS client, credentials, assets, policies,
+  negotiations and transfers, each is addressed separately on the management API, and a TMForum
+  offering states which contexts it is offered in. One deployment still, but the second identity has
+  to be provisioned by hand; the chart bootstraps exactly one.
+- **Two protocol versions side by side.** A profile carries its own DSP version, binding, namespace
+  and JSON-LD contexts, so the same context can serve one dataspace through two profiles while its
+  counterparties migrate from one DSP version to the next, and drop the old profile when they are
+  done. Every example in this repository uses 2025-1 on both profiles.
+
+In all three, counterparties and management clients notice the same thing: a DSP address names a
+context and a profile, and a management call names a context. [DSP addresses for
+counterparties](#dsp-addresses-for-counterparties) and [Management API](#management-api) have the
+shapes.
+
+## Demo flows
+
+Everything below runs against the local `dsp` scenario, the one scenario in this repository whose
+connectors are attached to more than one profile: both sides serve the same context on the profiles
+`http-dsp-profile-2025-1` and `dsp-fiware-ds2`, the second standing for another dataspace with its
+own DCP scopes and trusted issuers list. The values that produce this are in [Configuring contexts
+and profiles in the DSC chart](#configuring-contexts-and-profiles-in-the-dsc-chart) and the sections
+after it; nothing there needs to be read first to run the flows.
+
+### Starting the scenario
+
+```shell
+mvn clean deploy -Plocal,dsp
+```
+
+This is all the preparation the flows need. It brings up the trust anchor, the provider and the
+consumer, each side with one DCP participant context - `did:web:mp-operations.org` and
+`did:web:fancy-marketplace.biz` - attached to the two profiles `http-dsp-profile-2025-1` and
+`dsp-fiware-ds2`, and it provisions both identities: `identityhub.bootstrap` registers the
+participant with its key and STS client secret, `identityhub.credentialSync` mirrors the membership
+credential the vc-operator requests from Keycloak into it
+([`k3s/dsp-provider.yaml`](../k3s/dsp-provider.yaml),
+[`k3s/dsp-consumer.yaml`](../k3s/dsp-consumer.yaml)). Nothing has to be registered by hand; the
+manual procedure in [DSP integration](./DSP_INTEGRATION.md#provisioning-the-participant-identities)
+runs the same scripts and is there to follow along with, or to debug one of them.
+
+Wait for the two bootstrap Jobs before starting:
+
+```shell
+kubectl wait --for=condition=complete job/identityhub-bootstrap -n provider --timeout=5m
+kubectl wait --for=condition=complete job/identityhub-bootstrap -n consumer --timeout=5m
+```
+
+Vault runs in dev mode here, so its storage is in memory: after a vault restart the signing key,
+the super-user credential and the STS client secret are gone until the next deploy re-runs the Job,
+which is why it is a `post-upgrade` hook as well.
+
+What the deploy does *not* create is the thing being traded. Flows 3 and 4 need an offering in the
+provider's catalog: follow [prepare some data](./DSP_INTEGRATION.md#prepare-some-data) and
+[prepare the offering](./DSP_INTEGRATION.md#prepare-the-offering) once, or let the tests do it -
+
+```shell
+mvn clean integration-test -Ptest,dsp,dsp-test
+```
+
+runs every `@dsp` feature, among them
+[`dsp_multi_profile.feature`](../it/src/test/resources/it/dsp_multi_profile.feature) (flows 1 to 3
+in executable form), and leaves the offering behind when it finishes.
+
+### Prerequisites for the manual flows
+
+The local hosts resolve through the squid proxy of the `infra` namespace and serve self-signed
+certificates, so every command below carries `-k -x localhost:8888`. Drop the `-k` once the cluster
+CA is exported:
+
+```shell
+kubectl get secret ca-secret -n operators -o jsonpath='{.data.tls\.crt}' | base64 -d > local-ca.crt
+export CURL_CA_BUNDLE=./local-ca.crt
+```
+
+Flows 1 and 2 need nothing else - they are answered before any token is checked. Flows 3 and 4 need
+the offering from [Starting the scenario](#starting-the-scenario).
+
+### Flow 1 - which dataspaces does a context serve?
+
+The version metadata of a context lists one entry per attached profile and needs no token:
+
+```shell
+curl -s -k -x localhost:8888 \
+  'https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/did:web:mp-operations.org/.well-known/dspace-version' \
+  | jq -r '.protocolVersions[].profile'
+```
+
+```
+http-dsp-profile-2025-1
+dsp-fiware-ds2
+```
+
+This is the discovery step a counterparty performs: it names the dataspaces this context is
+reachable in, and nothing else. It is the attachment that decides, `fdsc.participants.<key>.profiles`
+in [One connector, two profiles](#one-connector-two-profiles): a profile that is declared but not
+attached to the context does not appear here.
+
+### Flow 2 - routing happens before authentication
+
+fdsc-edc resolves context and profile from the path first, and only then checks the DCP token. The
+two answers are therefore distinguishable without any credential: an attached profile rejects the
+request as unauthenticated, an unknown one is not routed at all. Send the request without a body -
+a request body is expanded as JSON-LD before the token is looked at, so `-d '{}'` answers
+`400 Failed to expand JsonObject` instead:
+
+```shell
+for PROFILE in http-dsp-profile-2025-1 dsp-fiware-ds2 dsp-unknown; do
+  printf '%-24s %s\n' "${PROFILE}" "$(curl -s -k -x localhost:8888 -o /dev/null -w '%{http_code}' \
+    -X POST \
+    "https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/did:web:mp-operations.org/${PROFILE}/catalog/request")"
+done
+```
+
+```
+http-dsp-profile-2025-1  401
+dsp-fiware-ds2           401
+dsp-unknown              404
+```
+
+The 401 carries a DSP `CatalogError` body, which is itself the proof that the request reached the
+profile's catalog handler; the 404 is the router's, and has no DSP body. For telling the two apart
+that is all that matters - a 400 over a malformed body means "routed" just as well as the 401 does.
+
+The same holds for the context id: a DID without a `fdsc.participants.*` entry answers 404 on every
+DSP route, with any body. That is the quickest check after a configuration change - 404 where you
+expect 401 means the context or the profile did not come up, not that the credentials are wrong.
+
+### Flow 3 - the same catalog through two dataspaces
+
+Every management call addresses one context and carries an OAuth2 token ([Management
+API](#management-api)); the consumer's Keycloak has the client-credentials client `edc-management`
+for that. The token expires after a few minutes,
+so repeat this when calls start returning 401:
+
+```shell
+export MANAGEMENT_API=https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v5beta/participants/did:web:fancy-marketplace.biz
+export MANAGEMENT_TOKEN=$(curl -s -k -x localhost:8888 -X POST \
+  'https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/protocol/openid-connect/token' \
+  --data grant_type=client_credentials \
+  --data client_id=edc-management \
+  --data client_secret=edc-management-client-secret | jq -r .access_token)
+```
+
+Now read the provider catalog once per profile. `protocol` is a profile of the *calling* context,
+the last segment of `counterPartyAddress` is the provider's profile for the same dataspace, and the
+two have to match:
+
+```shell
+for PROFILE in http-dsp-profile-2025-1 dsp-fiware-ds2; do
+  echo "== ${PROFILE}"
+  curl -s -k -x localhost:8888 -X POST "${MANAGEMENT_API}/catalog/request" \
+    --header "Authorization: Bearer ${MANAGEMENT_TOKEN}" \
+    --header 'Content-Type: application/json' \
+    --data-raw "{
+      \"@context\": [\"https://w3id.org/edc/connector/management/v2\"],
+      \"@type\": \"CatalogRequest\",
+      \"protocol\": \"${PROFILE}\",
+      \"counterPartyId\": \"did:web:mp-operations.org\",
+      \"counterPartyAddress\": \"https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/did:web:mp-operations.org/${PROFILE}\",
+      \"querySpec\": {\"@type\": \"QuerySpec\"}
+    }" | jq -r 'if type == "array" then "request failed: " + (.[0].message // tostring)
+                else (.["dcat:dataset"] // .dataset // []) | (if type == "array" then . else [.] end) | .[]["@id"]
+                end'
+done
+```
+
+A management error comes back as a JSON array rather than a catalog, which is what the `if type ==
+"array"` branch prints. The common one is
+
+```
+request failed: Unable to obtain credentials: Failed to fetch client secret from the vault with alias: did:web:fancy-marketplace.biz-sts-client-secret
+```
+
+and it means the participant was never provisioned, or Vault restarted and lost what the bootstrap
+wrote: the context asks its STS for a DCP token before it ever contacts the provider. Check that
+`job/identityhub-bootstrap` completed in that namespace, and re-run the deploy if Vault restarted.
+The alias in the message is the one the context's `edc.iam.sts.oauth.client.secret.alias` names, so
+a *different* DID in it means the context configuration and the provisioned identity disagree.
+
+Both profiles return the offering prepared above, because the local setup has one trust anchor and
+one context that owns the offering. What differs is how the catalog was obtained: for
+`dsp-fiware-ds2` the consumer asked its STS for a DCP token with that profile's scopes
+(`dcp.profiles.dsp-fiware-ds2.scopes.catalog`) and the provider validated the presented credential's
+issuer against that profile's TIL (`ebsiTir.profiles.dsp-fiware-ds2.tilAddress`, both in
+[One connector, two profiles](#one-connector-two-profiles)). Both are
+per-profile settings, so pointing the TIL of one profile at a list that does not carry the issuer
+and redeploying is the clearest way to see the separation: that profile's catalog request then
+fails at credential validation while the other one keeps working.
+
+### Flow 4 - a full consumer flow through the second dataspace
+
+[`dsp-consume.sh`](./scripts/dsp-consume.sh) walks catalog, negotiation, transfer and EDR. It talks
+to the management API directly, so expose it first:
+
+```shell
+kubectl port-forward svc/consumer-fdsc-edc-dcp -n consumer 8085:8085
+```
+
+Its `PROTOCOL` defaults to `http-dsp-profile-2025-1`, so the second dataspace needs it set, next to
+the profile in the DSP address:
+
+```shell
+MANAGEMENT_TOKEN=${MANAGEMENT_TOKEN} PROTOCOL=dsp-fiware-ds2 ./doc/scripts/dsp-consume.sh \
+  https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/did:web:mp-operations.org/dsp-fiware-ds2 \
+  http://localhost:8085/api/v1/management/v5beta/participants/did:web:fancy-marketplace.biz \
+  did:web:mp-operations.org
+```
+
+The script prints the data endpoint and the access token at the end; use them as in step 8 of the
+[DCP walkthrough](./DSP_INTEGRATION.md#dcp-1). Running it twice, once per profile, produces two
+independent agreements and transfers - negotiations and transfers belong to the context, not to the
+profile, so both show up under the same context's `/contractnegotiations/request`.
+
+### Flow 5 - a second identity, by hand
+
+The local scenario stops at one DID per connector: `identityhub.bootstrap` registers exactly one
+participant. To demo the [two-dataspaces-two-DIDs](#two-dataspaces-two-dids) setup on top of the
+running `dsp` scenario:
+
+1. Add the second profile and the second context to
+   `fdsc-edc.deployment.dcp.config.additionalProperties` of
+   [`k3s/dsp-provider.yaml`](../k3s/dsp-provider.yaml), as in [Two dataspaces, two
+   DIDs](#two-dataspaces-two-dids), and redeploy the provider release.
+2. Provision the second DID: `derive-key.sh` and `register.sh` from
+   `charts/data-space-connector/scripts/`, run with `DID`, `KEY_ALIAS`, `KEY_ID`,
+   `STS_CLIENT_SECRET` and the identity key of the second DID, exactly as in
+   [setup the provider](./DSP_INTEGRATION.md#setup-the-provider). A `did:web` that resolves locally
+   needs its own ingress and certificate, which is the laborious part of this demo.
+3. Issue that DID a membership credential and insert it into the identityhub, as in
+   [issue membership-credentials](./DSP_INTEGRATION.md#issue-membership-credentials), and make sure
+   the TIL of the second profile lists its issuer.
+4. Tag the TMForum offering with `"participantContextIds": ["<first DID>", "<second DID>"]` to offer
+   it in both dataspaces; untagged offerings stay with
+   `tmfExtension.defaultParticipantContextId` only. Flow 3 against the second context then shows
+   which offerings each dataspace sees.
+5. Give the second dataspace its own management client, scoped to its context with the hardcoded
+   `sub` mapper from [Management API](#management-api), and repeat flow 3 with that client's token:
+   it reaches `.../participants/<second DID>/...` and nothing else.
+
+## Configuring contexts and profiles in the DSC chart
 
 The fdsc-edc subchart has no value of its own for any of the new keys. They all go into
 `fdsc-edc.deployment.dcp.config.additionalProperties`, which is copied into
@@ -80,9 +341,9 @@ Connector-wide keys:
 
 ## One connector, two profiles
 
-The provider of the local `dsp` scenario serves one context on two profiles:
-`http-dsp-profile-2025-1` and `dsp-fiware-ds2`. The second stands for another dataspace with its own
-DCP scopes and TIL. They equal the defaults here, because the local setup has a single trust
+These are the values behind the [demo flows](#demo-flows): the provider of the local `dsp` scenario
+serving one context on the two profiles `http-dsp-profile-2025-1` and `dsp-fiware-ds2`. The second
+profile's DCP scopes and TIL equal the defaults here, because the local setup has a single trust
 anchor. This is [`k3s/dsp-provider.yaml`](../k3s/dsp-provider.yaml), which CI deploys:
 
 ```yaml
@@ -121,7 +382,7 @@ fdsc-edc:
           fdsc.participants.self.config.edc.iam.sts.oauth.client.id=did:web:mp-operations.org\n    \
           fdsc.participants.self.config.edc.iam.sts.oauth.client.secret.alias=did:web:mp-operations.org-sts-client-secret\n    \
           tmfExtension.defaultParticipantContextId=did:web:mp-operations.org\n    \
-          tmfExtension.schemaBaseUri=https://raw.githubusercontent.com/SEAMWARE/fdsc-edc/2.1.0/schemas/\n    \
+          tmfExtension.schemaBaseUri=https://raw.githubusercontent.com/SEAMWARE/fdsc-edc/2.1.1/schemas/\n    \
           edc.iam.oauth2.issuer=https://keycloak-provider.127.0.0.1.nip.io/realms/test-realm\n    \
           edc.iam.oauth2.jwks.url=http://provider-keycloak.provider.svc.cluster.local:8080/realms/test-realm/protocol/openid-connect/certs"
 ```
@@ -132,7 +393,8 @@ them.
 
 ## Two dataspaces, two DIDs
 
-When the second dataspace expects a different identity, add a second context with its own DID. The
+When the second dataspace expects a different identity, add a second context with its own DID; the
+manual steps to try this in the local scenario are [flow 5](#flow-5---a-second-identity-by-hand). The
 values below are rendered by the chart's helm-unittest suite
 [`fdsc-edc-multi-dataspace_test.yaml`](../charts/data-space-connector/tests/fdsc-edc-multi-dataspace_test.yaml).
 Context `a` takes part in dataspace A through the default profile; context `b` takes part in
@@ -179,7 +441,7 @@ fdsc-edc:
           fdsc.participants.b.config.edc.iam.sts.oauth.client.id=did:web:dataspace-b.example.org\n    \
           fdsc.participants.b.config.edc.iam.sts.oauth.client.secret.alias=did:web:dataspace-b.example.org-sts-client-secret\n    \
           tmfExtension.defaultParticipantContextId=did:web:dataspace-a.example.org\n    \
-          tmfExtension.schemaBaseUri=https://raw.githubusercontent.com/SEAMWARE/fdsc-edc/2.1.0/schemas/\n    \
+          tmfExtension.schemaBaseUri=https://raw.githubusercontent.com/SEAMWARE/fdsc-edc/2.1.1/schemas/\n    \
           edc.iam.oauth2.issuer=https://keycloak.example.org/realms/dsc\n    \
           edc.iam.oauth2.jwks.url=http://keycloak.dsc.svc.cluster.local:8080/realms/dsc/protocol/openid-connect/certs"
 ```
@@ -210,7 +472,7 @@ For the second DID:
    it is made in through `participantContextIds`, e.g.
    `"participantContextIds": ["did:web:dataspace-a.example.org", "did:web:dataspace-b.example.org"]`,
    or `["*"]` for every context. Upstream
-   [Offering a product in one, several or all dataspaces](https://github.com/SEAMWARE/fdsc-edc/blob/2.1.0/docs/multi-dataspace.md#offering-a-product-in-one-several-or-all-dataspaces)
+   [Offering a product in one, several or all dataspaces](https://github.com/SEAMWARE/fdsc-edc/blob/2.1.1/docs/multi-dataspace.md#offering-a-product-in-one-several-or-all-dataspaces)
    has the details.
 
 ## Management API
@@ -360,28 +622,6 @@ product specifications. The DSP messages hang below it (`/catalog/request`, `/ne
 
 A gateway in front of the controlplane that exempts the version metadata from authentication must
 exempt the per-context path above.
-
-## Verification
-
-Against the local `dsp` scenario, through its proxy:
-
-```shell
-# profiles of the provider context: lists http-dsp-profile-2025-1 and dsp-fiware-ds2, and nothing else
-curl -s -k -x localhost:8888 \
-  'https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/did:web:mp-operations.org/.well-known/dspace-version' | jq .
-
-# routing comes before authentication: an attached profile without a DCP token answers 401 ...
-curl -s -k -x localhost:8888 -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/json' -d '{}' \
-  'https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/did:web:mp-operations.org/dsp-fiware-ds2/catalog/request'
-# ... and a profile that is not attached answers 404
-curl -s -k -x localhost:8888 -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/json' -d '{}' \
-  'https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/did:web:mp-operations.org/dsp-unknown/catalog/request'
-```
-
-The catalog per profile is read through the consumer's management API: run step 1 of the
-[DCP walkthrough](./DSP_INTEGRATION.md#dcp-1) once with `http-dsp-profile-2025-1` and once with
-`dsp-fiware-ds2`, as `protocol` and as the last segment of `counterPartyAddress`. Both return the
-provider's offers. `dsp_multi_profile.feature` checks the same in CI.
 
 ## Migrating from 10.x
 
