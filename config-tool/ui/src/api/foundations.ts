@@ -2,7 +2,18 @@
 import { api } from './client'
 
 /** Answer type, mirroring `model.FoundationType`; a choice is checked against its options, every other type with a pattern. */
-export type FoundationType = 'string' | 'hostname' | 'domain' | 'choice' | 'did' | 'url' | 'bool' | 'credentialTypes' | 'secretName'
+export type FoundationType =
+  | 'string'
+  | 'hostname'
+  | 'domain'
+  | 'choice'
+  | 'did'
+  | 'url'
+  | 'bool'
+  | 'credentialTypes'
+  | 'secretName'
+  | 'resourceName'
+  | 'email'
 
 /** One element of a `credentialTypes` answer, mirroring the Go check; types are unique within the list. */
 export interface CredentialType {

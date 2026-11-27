@@ -1,7 +1,9 @@
 /** Open questions: fields left unanswered or deliberately marked "ask later", each counted once. */
 import type { Foundation } from '../api/foundations'
+import type { Dependency } from '../api/infrastructure'
 import { TargetType, type Target } from './answers'
 import { answerErrors, reservedRefs } from './foundations'
+import { infraContext, shownFields, shownInfraErrors, unansweredInfra } from './infrastructure'
 import type { Issues } from './issues'
 import type { AppState } from './reducer'
 import { StageId } from './stageIds'
@@ -13,15 +15,20 @@ export type TargetFieldId = `target.${TargetField}`
 /** The open-question id of a foundation answer, `answers.<dotted id>` as the server names it. */
 export type AnswerFieldId = `answers.${string}`
 
+/** The open-question id of a Stage 4 field: `infrastructure.<dependency>` is its mode, a further segment a question. */
+export type InfraFieldId = `infrastructure.${string}`
+
 /** A field an open question can name, `<section>.<key>` as in the profile's `open`. */
-export type FieldId = TargetFieldId | AnswerFieldId
+export type FieldId = TargetFieldId | AnswerFieldId | InfraFieldId
 
 type Section = FieldId extends `${infer S}.${string}` ? S : never
 
 // Every foundation the shipped bundles declare is asked on Foundations (`stage: foundations`).
-const SECTION_STAGES: Record<Section, StageId> = { target: StageId.Target, answers: StageId.Foundations }
+const SECTION_STAGES: Record<Section, StageId> = { target: StageId.Target, answers: StageId.Foundations, infrastructure: StageId.Infrastructure }
 
 const ANSWERS_PREFIX = 'answers.'
+/** `model.InfrastructureFieldPrefix` in Go. */
+const INFRA_PREFIX = 'infrastructure.'
 
 /** The field id of a Target field. */
 export function targetFieldId(field: TargetField): TargetFieldId {
@@ -43,9 +50,35 @@ export function answerId(field: AnswerFieldId): string {
   return field.slice(ANSWERS_PREFIX.length)
 }
 
-/** Whether `id` is a field id the UI knows: a Target field or any foundation answer (the server checks the id). */
+/** The field id of a dependency's mode. */
+export function infraModeFieldId(dependency: string): InfraFieldId {
+  return `${INFRA_PREFIX}${dependency}`
+}
+
+/** The field id of a dependency's question; `question` is its local id, `secret.keycloak` for a per-ingress one. */
+export function infraQuestionFieldId(dependency: string, question: string): InfraFieldId {
+  return `${INFRA_PREFIX}${dependency}.${question}`
+}
+
+/** Whether `field` names a Stage 4 mode or question. */
+export function isInfraFieldId(field: QuestionId): field is InfraFieldId {
+  return field.startsWith(INFRA_PREFIX)
+}
+
+/** The dependency and local question id an infrastructure field names; `question` is undefined for the mode. */
+export function infraField(field: InfraFieldId): { dependency: string; question?: string } {
+  const rest = field.slice(INFRA_PREFIX.length)
+  const dot = rest.indexOf('.')
+  return dot < 0 ? { dependency: rest } : { dependency: rest.slice(0, dot), question: rest.slice(dot + 1) }
+}
+
+/** Whether `id` is a field id the UI knows: a Target field, any foundation answer or any infrastructure field (the
+ *  server checks the id). */
 export function isFieldId(id: string): id is FieldId {
-  return id.startsWith(ANSWERS_PREFIX) ? id.length > ANSWERS_PREFIX.length : (FIELD_IDS as readonly string[]).includes(id)
+  for (const prefix of [ANSWERS_PREFIX, INFRA_PREFIX]) {
+    if (id.startsWith(prefix)) return id.length > prefix.length
+  }
+  return (FIELD_IDS as readonly string[]).includes(id)
 }
 
 /** Every Target field id, in screen order. */
@@ -74,11 +107,23 @@ export function fieldStage(id: QuestionId): StageId {
   return id === ROLE_QUESTION ? StageId.Role : SECTION_STAGES[id.split('.')[0] as Section]
 }
 
-/** How Review names a field; an answer takes its foundation's label, or its id until the foundations are loaded. */
-export function fieldLabel(id: FieldId, foundations: readonly Foundation[] = []): string {
+/** How Review names a field; an answer takes its foundation's label, an infrastructure field its dependency's title
+ *  and question's label, each its id until the labels are loaded. */
+export function fieldLabel(id: FieldId, foundations: readonly Foundation[] = [], dependencies: readonly Dependency[] = []): string {
+  if (isInfraFieldId(id)) return infraFieldLabel(id, dependencies)
   if (!id.startsWith(ANSWERS_PREFIX)) return FIELD_LABELS[id as TargetFieldId]
   const answer = id.slice(ANSWERS_PREFIX.length)
   return foundations.find((f) => f.id === answer)?.label ?? answer
+}
+
+function infraFieldLabel(id: InfraFieldId, dependencies: readonly Dependency[]): string {
+  const { dependency, question } = infraField(id)
+  const dep = dependencies.find((d) => d.id === dependency)
+  if (!dep) return id.slice(INFRA_PREFIX.length)
+  if (question === undefined) return dep.title
+  const q = dep.modes.flatMap((m) => m.questions).find((o) => o.id === question)
+  if (!q) return `${dep.title}: ${question}`
+  return `${dep.title}: ${q.label}${q.ingress ? ` (${q.ingress.label})` : ''}`
 }
 
 /** DOM id of the field's input, so a Review link can focus it. */
@@ -117,12 +162,23 @@ export function openQuestions(state: AppState): OpenQuestion[] {
   const question = (id: FieldId): OpenQuestion => ({
     field: id,
     stage: fieldStage(id),
-    label: fieldLabel(id, state.foundations),
+    label: fieldLabel(id, state.foundations, state.dependencies),
     marked: state.open.includes(id),
   })
   const role = state.answers.role === undefined ? [ROLE_OPEN] : []
   const answers = state.open.filter((id) => id.startsWith(ANSWERS_PREFIX))
-  return [...targetFields.map(question), ...role, ...answers.map(question)]
+  return [...targetFields.map(question), ...role, ...answers.map(question), ...infraOpen(state).map(question)]
+}
+
+// Only what Stage 4 asks right now counts: an inactive mode's or a hidden question's answer and marker are kept for a
+// switch back. Until the dependencies are loaded, only the markers are known.
+function infraOpen(state: AppState): InfraFieldId[] {
+  const marked = state.open.filter(isInfraFieldId)
+  if (!state.dependencies) return marked
+  const { infrastructure, values, target } = state.answers
+  const ctx = infraContext(values, state.foundations, reservedRefs(target))
+  const unanswered = new Set(unansweredInfra(infrastructure, state.dependencies, ctx))
+  return shownFields(infrastructure, state.dependencies, ctx).filter((id) => unanswered.has(id) || marked.includes(id))
 }
 
 /** The Target stage's footer and rail counters; a marked field with a format error counts as open and as an error. */
@@ -140,6 +196,14 @@ export function roleIssues(state: AppState): Issues {
 export function foundationIssues(state: AppState): Issues {
   const errors = Object.keys(answerErrors(state.answers.values, state.foundations, reservedRefs(state.answers.target))).length
   return { warnings: 0, errors, open: openCount(state, StageId.Foundations) }
+}
+
+/** The Infrastructure stage's counters: its open questions and the shown answers with a format error. */
+export function infrastructureIssues(state: AppState): Issues {
+  const { infrastructure, values, target } = state.answers
+  const ctx = infraContext(values, state.foundations, reservedRefs(target))
+  const errors = Object.keys(shownInfraErrors(infrastructure, state.dependencies, ctx)).length
+  return { warnings: 0, errors, open: openCount(state, StageId.Infrastructure) }
 }
 
 function openCount(state: AppState, stage: StageId): number {

@@ -5,7 +5,7 @@ import { fieldLabel, type FieldId } from '../state/openQuestions'
 /** Toggles the field's "ask later" marker; the value stays either way. */
 export function AskLater({ field }: { field: FieldId }) {
   const { state, dispatch } = useStore()
-  const label = fieldLabel(field, state.foundations)
+  const label = fieldLabel(field, state.foundations, state.dependencies)
   return (
     <button
       type="button"

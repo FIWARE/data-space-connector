@@ -10,7 +10,7 @@ import { useRoles } from './useRoles'
 function Row({ applied, catalogue }: { applied: AppliedRoleChange; catalogue?: RoleCatalogue }) {
   const [expanded, setExpanded] = useState(false)
   const id = useId()
-  const { change, chartSwitch } = applied
+  const { change, chartSwitch, dependencies } = applied
   const title = (role: string) => catalogue?.roles.find((r) => r.id === role)?.title ?? role
   const [from, to] = [title(change.fromRole), title(change.toRole)]
   return (
@@ -20,7 +20,7 @@ function Row({ applied, catalogue }: { applied: AppliedRoleChange; catalogue?: R
         {SUMMARY_TOGGLE}
       </button>
       <div id={id} hidden={!expanded}>
-        {expanded && <RoleChangeSummary change={change} chartSwitch={chartSwitch} catalogue={catalogue} />}
+        {expanded && <RoleChangeSummary change={change} chartSwitch={chartSwitch} catalogue={catalogue} dependencies={dependencies} />}
       </div>
     </li>
   )

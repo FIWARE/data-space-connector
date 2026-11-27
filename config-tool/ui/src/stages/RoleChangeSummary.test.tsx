@@ -1,9 +1,10 @@
 import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import type { RoleCatalogue, RoleChange } from '../api/roles'
-import { ROLES } from '../test/api'
+import type { Dependency } from '../api/infrastructure'
+import type { ChartSwitch, RoleCatalogue, RoleChange } from '../api/roles'
+import { CERT_MANAGER, ROLES } from '../test/api'
 import { RoleChangeSummary } from './RoleChangeSummary'
-import { KEPT, KEPT_REASON, TURNS_OFF, TURNS_ON } from './roleChangeText'
+import { DROPPED, KEPT, KEPT_REASON, TURNS_OFF, TURNS_ON } from './roleChangeText'
 
 const CHANGE: RoleChange = {
   fromRole: 'consumer',
@@ -41,5 +42,23 @@ describe('RoleChangeSummary', () => {
   ])('%s', (_name, catalogue, sections) => {
     render(<RoleChangeSummary change={CHANGE} chartSwitch={null} catalogue={catalogue} />)
     for (const [heading, rows] of Object.entries(sections)) expect(items(heading)).toEqual(rows)
+  })
+
+  const SWITCH: ChartSwitch = {
+    fromChart: 'data-space-connector',
+    fromVersion: '10.16.0',
+    toChart: 'trust-anchor',
+    droppedChoices: [],
+    carriedAnswers: [],
+    droppedAnswers: ['org.displayName'],
+    droppedInfrastructure: ['infrastructure.certManager'],
+  }
+
+  it.each<[string, Dependency[] | undefined, string]>([
+    ['names a dropped infrastructure choice by its dependency’s title', [CERT_MANAGER], CERT_MANAGER.title],
+    ['falls back to the dependency id without the old chart’s dependencies', undefined, 'certManager'],
+  ])('%s', (_name, dependencies, label) => {
+    render(<RoleChangeSummary change={CHANGE} chartSwitch={SWITCH} dependencies={dependencies} />)
+    expect(items(DROPPED).slice(-2)).toEqual(['org.displayName', label])
   })
 })

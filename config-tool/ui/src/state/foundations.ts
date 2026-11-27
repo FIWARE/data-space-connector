@@ -8,11 +8,17 @@ export const MAX_HOSTNAME_LENGTH = 253
 export const MAX_URL_LENGTH = 2048
 /** Longest credentialTypes answer, `maxCredentialTypes` in Go. */
 export const MAX_CREDENTIAL_TYPES = 64
+/** Longest local part of an email answer, `maxEmailLocalLength` in Go. */
+export const MAX_EMAIL_LOCAL_LENGTH = 64
 
 export const MSG_PLAIN_LINE = `must be a single non-empty line without leading or trailing spaces, control characters, '"', '\\', '<' or '>'`
 export const MSG_HOSTNAME = `must be a host name of lowercase letters, digits, '-' and '.', at most ${MAX_HOSTNAME_LENGTH} characters`
 export const MSG_SECRET_NAME = `must be a Secret name of lowercase letters, digits, '-' and '.', at most ${MAX_HOSTNAME_LENGTH} characters`
+export const MSG_RESOURCE_NAME = `must be a Kubernetes name of lowercase letters, digits, '-' and '.', at most ${MAX_HOSTNAME_LENGTH} characters`
 export const MSG_DOMAIN = 'must be a domain of at least two labels'
+export const MSG_EMAIL_LOCAL = `must be an e-mail address local@domain, the local part at most ${MAX_EMAIL_LOCAL_LENGTH} letters, digits and '.', '_', '%', '+', '-'`
+export const MSG_EMAIL_DOMAIN = "must be an e-mail address whose domain has at least two labels of lowercase letters, digits and '-'"
+export const MSG_EMAIL_RESERVED = 'must not use an RFC 2606 example or test domain, which no mail reaches'
 export const MSG_STRING = 'must be a string'
 export const MSG_URL =
   `must be an absolute http or https URL with a host, without user info, fragment, spaces, control characters, '"', '\\', '<' or '>'`
@@ -50,6 +56,21 @@ const URL_HOST_ASCII_ESCAPE = /%(?!25)[0-7]/
 const URL_BAD_ESCAPE = /%(?![0-9A-Fa-f]{2})/
 const CREDENTIAL_TYPE = /^[A-Za-z][A-Za-z0-9._-]*$/
 const CREDENTIAL_TYPE_KEYS = ['type', 'description']
+const EMAIL_LOCAL = /^[A-Za-z0-9_%+-]+(\.[A-Za-z0-9_%+-]+)*$/
+// RFC 2606's example second-level domains (their subdomains too) and reserved top-level names, as in Go.
+const RESERVED_MAIL_DOMAINS = ['example.com', 'example.net', 'example.org']
+const RESERVED_MAIL_TLDS = ['example', 'test', 'invalid', 'localhost']
+
+function checkEmail(value: string): string | undefined {
+  const at = value.indexOf('@')
+  const local = value.slice(0, at)
+  if (at < 0 || local.length > MAX_EMAIL_LOCAL_LENGTH || !EMAIL_LOCAL.test(local)) return MSG_EMAIL_LOCAL
+  const domain = value.slice(at + 1)
+  if (checkAnswer('domain', domain) !== undefined) return MSG_EMAIL_DOMAIN
+  const tld = domain.slice(domain.lastIndexOf('.') + 1)
+  if (RESERVED_MAIL_TLDS.includes(tld) || RESERVED_MAIL_DOMAINS.some((d) => domain === d || domain.endsWith(`.${d}`))) return MSG_EMAIL_RESERVED
+  return undefined
+}
 
 function checkURL(value: string): string | undefined {
   // Go's len counts UTF-8 bytes, not UTF-16 units.
@@ -87,6 +108,8 @@ function checkCredentialTypes(value: AnswerValue): string | undefined {
   return undefined
 }
 
+const NAME_ERRORS: Partial<Record<FoundationType, string>> = { secretName: MSG_SECRET_NAME, resourceName: MSG_RESOURCE_NAME }
+
 /** Why `value` is not a valid answer of `type`; undefined when it is. `options` are a choice's offered values. */
 export function checkAnswer(type: FoundationType, value: AnswerValue, options: readonly FoundationOption[] = []): string | undefined {
   if (type === 'bool') return typeof value === 'boolean' ? undefined : MSG_BOOL
@@ -96,7 +119,8 @@ export function checkAnswer(type: FoundationType, value: AnswerValue, options: r
   if (type === 'string') return PLAIN_LINE.test(value) ? undefined : MSG_PLAIN_LINE
   if (type === 'choice') return options.some((o) => o.value === value) ? undefined : msgChoice(options)
   if (type === 'did') return DID.test(value) ? undefined : MSG_DID
-  if (value.length > MAX_HOSTNAME_LENGTH || !HOSTNAME.test(value)) return type === 'secretName' ? MSG_SECRET_NAME : MSG_HOSTNAME
+  if (type === 'email') return checkEmail(value)
+  if (value.length > MAX_HOSTNAME_LENGTH || !HOSTNAME.test(value)) return NAME_ERRORS[type] ?? MSG_HOSTNAME
   if (type === 'domain' && !value.includes('.')) return MSG_DOMAIN
   return undefined
 }
@@ -138,7 +162,7 @@ export function fullname(release: string, chart: string): string {
 }
 
 /** `template` with its references filled from the reserved refs, then resolved answers; undefined while one is unresolved. */
-function fill(template: string, values: Record<string, AnswerValue>, foundations: readonly Foundation[], reserved: ReservedRefs): string | undefined {
+export function fill(template: string, values: Record<string, AnswerValue>, foundations: readonly Foundation[], reserved: ReservedRefs): string | undefined {
   let missing = false
   const filled = template.replace(ANSWER_REFERENCE, (_, fullnameOf: string | undefined, chart: string | undefined, id: string | undefined) => {
     const ref = fullnameOf ?? id ?? ''

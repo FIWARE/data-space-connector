@@ -133,6 +133,9 @@ In `bundled` with `prod`, an open `acmeEmail` or `ingressClass` would let the ch
   list does not change.
 - In `external`, the host foundations' `cert-manager.io/common-name` and `alt-names` annotations stay. They are inert
   without an issuer annotation.
+- Stage 3's "used by" list of a host (and of `domain.base`) keeps the per-ingress cert-manager keys. Each one renders
+  only while that host resolves, and the `external` Secret name derives from it, so the host does reach them. Stage 4's
+  "writes" disclosure lists the same keys by mode.
 
 ## Alternatives
 

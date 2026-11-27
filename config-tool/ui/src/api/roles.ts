@@ -50,6 +50,8 @@ export interface ChartSwitch {
   carriedAnswers: string[]
   /** Every other answer id; sorted. */
   droppedAnswers: string[]
+  /** The `infrastructure.<dependency>` fields dropped with their open questions, since modes are per chart; sorted. */
+  droppedInfrastructure?: string[]
 }
 
 /** A user or values-file toggle a role change keeps in its state. */

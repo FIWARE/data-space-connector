@@ -9,7 +9,7 @@ const NOW = Date.parse('2026-11-19T12:00:00Z')
 
 const ENTERED: AppState = {
   ...reducer(initialState, { type: 'newConfiguration' }),
-  answers: { values: {}, features: {}, target: { ...emptyAnswers().target, type: TargetType.Cluster, namespace: 'Prod_NS', releaseName: 'provider' } },
+  answers: { infrastructure: {}, values: {}, features: {}, target: { ...emptyAnswers().target, type: TargetType.Cluster, namespace: 'Prod_NS', releaseName: 'provider' } },
   open: ['target.context', 'target.namespace'],
 }
 
@@ -29,7 +29,7 @@ describe('api/profile', () => {
 
   it('drops open ids the UI does not know and fills target keys the profile lacks', () => {
     const profile = { ...toProfile(ENTERED), target: { namespace: 'x' } as AppState['answers']['target'], open: [{ field: 'nope' }, { field: 'target.namespace' }] }
-    expect(fromProfile(profile)).toEqual({ answers: { values: {}, features: {}, target: { ...emptyAnswers().target, namespace: 'x' } }, open: ['target.namespace'] })
+    expect(fromProfile(profile)).toEqual({ answers: { infrastructure: {}, values: {}, features: {}, target: { ...emptyAnswers().target, namespace: 'x' } }, open: ['target.namespace'] })
   })
 
   it('restores string, bool and list answers and drops other shapes', () => {

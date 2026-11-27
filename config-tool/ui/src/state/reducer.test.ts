@@ -17,7 +17,7 @@ const BUSY: AppState = {
   entered: true,
   stage: StageId.Features,
   visited: [StageId.Target, StageId.Role, StageId.Features],
-  answers: { values: {}, features: {}, target: { ...emptyAnswers().target, type: TargetType.Cluster, namespace: 'provider', chartVersion: '10.15.0', environment: Environment.Production } },
+  answers: { infrastructure: {}, values: {}, features: {}, target: { ...emptyAnswers().target, type: TargetType.Cluster, namespace: 'provider', chartVersion: '10.15.0', environment: Environment.Production } },
   session: { kubeconfig: KUBECONFIG, chosenContext: 'prod' },
   expert: true,
 }
@@ -32,7 +32,7 @@ describe('reducer', () => {
     const next = reducer(BUSY, { type: 'fileLoaded', report: REPORT, file: FILE })
     expect(next).toMatchObject({ entered: true, stage: StageId.Review, visited: [StageId.Review], expert: false, loaded: REPORT, loadedFile: FILE })
     expect(next.session).toEqual({ kubeconfig: KUBECONFIG, chosenContext: undefined })
-    expect(next.answers).toEqual({ values: { 'domain.base': 'example.org' }, features: {}, target: { ...emptyAnswers().target, chartVersion: REPORT.chartVersion } })
+    expect(next.answers).toEqual({ infrastructure: {}, values: { 'domain.base': 'example.org' }, features: {}, target: { ...emptyAnswers().target, chartVersion: REPORT.chartVersion } })
   })
 
   it('seeds only the foundation answers a loaded file derives, and saving keeps them', () => {
@@ -174,7 +174,7 @@ describe('reducer: trial', () => {
   it('lands on Review with only Review visited, a development target and the trial held', () => {
     const next = reducer({ ...loaded, profilePath: PROFILE_PATH }, { type: 'trialStarted', trial: TRIAL })
     expect(next).toMatchObject({ entered: true, stage: StageId.Review, visited: [StageId.Review], expert: false, open: [], trial: TRIAL })
-    expect(next.answers).toEqual({ values: {}, features: {}, target: { ...emptyAnswers().target, environment: Environment.Development } })
+    expect(next.answers).toEqual({ infrastructure: {}, values: {}, features: {}, target: { ...emptyAnswers().target, environment: Environment.Development } })
     expect(next.loaded).toBeUndefined()
     expect(next.loadedFile).toBeUndefined()
     expect(next.profilePath).toBeUndefined()

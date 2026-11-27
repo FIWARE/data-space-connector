@@ -16,7 +16,7 @@ const VALID: Target = {
 const PICKED = 'provider'
 
 function stateOf(change: Partial<Target>, open: readonly FieldId[] = []): AppState {
-  return { ...initialState, answers: { values: {}, role: PICKED, features: {}, target: { ...VALID, ...change } }, open }
+  return { ...initialState, answers: { infrastructure: {}, values: {}, role: PICKED, features: {}, target: { ...VALID, ...change } }, open }
 }
 
 function withRole(state: AppState, role: string | undefined): AppState {
