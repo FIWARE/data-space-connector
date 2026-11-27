@@ -229,11 +229,16 @@ pom.xml                       # drives local-deploy + integration tests
   `{{ .target.environment }}`, a reserved read-only ref) plus a bundle `resources:` table compiled into `Only` targets;
   `custom` renders nothing. A `memoryLimit` rule kind (with `when`) warns in production; `check.Evaluate` takes
   `render.Options`. Figures derive from PREREQUISITES.md#sizing (measured on 10.13.2).
-- US-3.6 (#130, planned, see `IMPLEMENTATION_PLAN.md`, ADR 0025): `proxy.{https,http,no}` and `ca.privateSecret`
+- US-3.6 (#130, shipped, ADR 0025): `proxy.{https,http,no}` and `ca.privateSecret`
   (group `egress`). Most targets are list elements, so the render gains keyed elements (`lists:` table with the chart's
   base elements), `each` targets (APISIX `proxy_opts` in existing routes only), `requires` and the reserved refs
   `target.release`/`target.namespace`. One PEM Secret, key `ca.crt`. Keycloak trusts it via `truststore-paths` (not
   `tls.truststore*`, which is inbound mTLS only). No option ever disables TLS verification.
+- US-4.1 (#131, planned, see `IMPLEMENTATION_PLAN.md`, ADR 0026): Stage 4's `infrastructure:` (dependency, three modes
+  `bundled`/`cluster`/`external`, per-mode questions and targets) plus an `ingresses:` table, compiled into synthetic
+  foundations `infra.<dep>.mode` / `infra.<dep>.<q>` with `When`-gated targets; `external` per-host Secret names
+  `replaces` the host foundations' `tls[0].secretName`. Profile: `infrastructure: {<dep>: {mode, answers}}`.
+  Synthetic foundations are in `CompiledFoundations()`, never in the Stage 3 `b.Foundations` list.
 
 ## Documentation
 
