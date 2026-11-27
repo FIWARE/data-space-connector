@@ -286,3 +286,30 @@
   override:
     rules:
       - {id: r, severity: error, stage: foundations, field: infrastructure.certManager.issuer, when: [{field: infrastructure.certManager, equals: cluster}], message: M}
+- name: per-ingress requirement declaring a name
+  err: 'perIngressQuestion (secret): requirement: name is the answer, so it is not declared'
+  override:
+    infrastructure:
+      - id: certManager
+        title: TLS
+        modes:
+          - id: external
+            label: External
+            perIngressQuestion:
+              id: secret
+              type: secretName
+              label: TLS Secret
+              key: 'tls[0].secretName'
+              replaces: true
+              requirement: {kind: secret, name: "{{ .domain.base }}", keys: [tls.crt], purpose: P}
+- name: mode requirement without keys
+  err: 'modes[0] (cluster): requirements[0]: key must be a non-empty literal'
+  override:
+    infrastructure:
+      - id: db
+        title: DB
+        modes:
+          - id: cluster
+            label: Cluster
+            questions: [{id: secret, type: secretName, label: Secret}]
+            requirements: [{kind: secret, name: "{{ .infra.db.secret }}", purpose: P}]

@@ -46,12 +46,13 @@ func DerivedDiff(b model.Bundle, prev, next profile.Profile) (AnswerDiff, error)
 	if err != nil {
 		return AnswerDiff{}, err
 	}
+	nextGiven := givenAnswers(next)
 	for _, id := range b.FoundationOrder() {
 		f, _ := b.Foundation(id)
 		if f.DefaultTemplate() == nil || len(f.DefaultRefs()) == 0 {
 			continue
 		}
-		kept, given := next.Answers[id]
+		kept, given := nextGiven[id]
 		if !given {
 			if !reflect.DeepEqual(before.answers[id], after.answers[id]) {
 				diff.Rederived = append(diff.Rederived, DerivedChange{ID: id, Before: before.answers[id], After: after.answers[id]})

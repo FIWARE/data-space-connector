@@ -23,8 +23,9 @@ func HandSet(b model.Bundle, p profile.Profile) ([]HandSetAnswer, error) {
 		return nil, err
 	}
 	list := []HandSetAnswer{}
+	given := givenAnswers(p)
 	for _, id := range b.FoundationOrder() {
-		v, ok := p.Answers[id]
+		v, ok := given[id]
 		f, _ := b.Foundation(id)
 		if !ok || f.DefaultTemplate() == nil || len(f.DefaultRefs()) == 0 {
 			continue

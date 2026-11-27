@@ -42,8 +42,7 @@ type elementRule struct {
 // elementRules lists the loaded nodes b's element and each targets write, in bundle order.
 func elementRules(doc *roundtrip.Document, b model.Bundle, root roundtrip.Path) []elementRule {
 	var rules []elementRule
-	for _, decl := range b.Foundations {
-		f, _ := b.Foundation(decl.ID)
+	for _, f := range b.CompiledFoundations() {
 		for _, t := range f.Targets {
 			if t.Element == nil && t.Each == nil {
 				continue
@@ -122,8 +121,7 @@ func unresolved(b model.Bundle, t model.CompiledTarget, resolved map[string]any)
 	targets := []model.CompiledTarget{t}
 	if t.Mechanism != "" {
 		targets = nil
-		for _, decl := range b.Foundations {
-			f, _ := b.Foundation(decl.ID)
+		for _, f := range b.CompiledFoundations() {
 			for _, o := range f.Targets {
 				if o.Element != nil && o.Mechanism == t.Mechanism {
 					targets = append(targets, o)
@@ -165,8 +163,7 @@ func withhold(doc *roundtrip.Document, root roundtrip.Path, rules []elementRule,
 		if !ok || off[m.ID] {
 			continue
 		}
-		for _, decl := range b.Foundations {
-			f, _ := b.Foundation(decl.ID)
+		for _, f := range b.CompiledFoundations() {
 			for _, t := range f.Targets {
 				if _, unready := unresolved(b, t, resolved); t.Mechanism == m.ID && !unready {
 					withheld(f.ID, t, noteConflict, strings.Join(paths, ", "))
@@ -176,8 +173,7 @@ func withhold(doc *roundtrip.Document, root roundtrip.Path, rules []elementRule,
 	}
 	for _, l := range b.ListTable() {
 		var owned []elementRule
-		for _, decl := range b.Foundations {
-			f, _ := b.Foundation(decl.ID)
+		for _, f := range b.CompiledFoundations() {
 			for _, t := range f.Targets {
 				if t.Element == nil || !slices.Equal(t.Path, l.Path) || off[groupOf(f.ID, t)] {
 					continue

@@ -13,19 +13,28 @@ const RequirementSecret = "secret"
 // Requirement is a cluster object the rendered values reference but the tool never creates; NEXT_STEPS lists it.
 type Requirement struct {
 	Kind string `yaml:"kind"`
-	// Name is a template over answers; the requirement applies only while every one of them resolves.
+	// Name is a template over answers; the requirement applies only while every one of them resolves. A per-ingress
+	// question's requirement has none: its name is the question's answer.
 	Name string `yaml:"name"`
-	// Key is the data key the object must hold.
-	Key     string `yaml:"key"`
-	Purpose string `yaml:"purpose"`
+	// Key is the data key the object must hold; Keys lists several. Exactly one of them is set.
+	Key     string   `yaml:"key"`
+	Keys    []string `yaml:"keys"`
+	Purpose string   `yaml:"purpose"`
+	// When must all hold, over compiled answer ids, for the requirement to apply; a mode's rows get its mode too.
+	When []TargetCondition `yaml:"when"`
 }
 
 // CompiledRequirement is a validated Requirement.
 type CompiledRequirement struct {
-	Kind, Key, Purpose string
-	Name               *template.Template
+	Kind, Purpose string
+	// Keys are the data keys the object must hold, in declaration order.
+	Keys []string
+	Name *template.Template
 	// Refs are the answer ids Name reads, sorted.
 	Refs []string
+	// When must all hold and Requires resolve for the requirement to apply; both nil for an ungated row.
+	When     []TargetCondition
+	Requires []string
 }
 
 // Requirements returns the bundle's requirements table in bundle order.
@@ -33,8 +42,15 @@ func (b Bundle) Requirements() []CompiledRequirement {
 	return b.requirements
 }
 
-// Resolve renders the name over the resolved answers, keyed by foundation id; false while a ref is unanswered.
+// Resolve renders the name over the resolved answers, keyed by foundation id; false while a ref or a requires is
+// unanswered or a When condition does not hold.
 func (r CompiledRequirement) Resolve(answers map[string]any) (string, bool, error) {
+	if slices.ContainsFunc(r.When, func(c TargetCondition) bool { return !c.Holds(answers) }) {
+		return "", false, nil
+	}
+	if slices.ContainsFunc(r.Requires, func(id string) bool { _, ok := answers[id]; return !ok }) {
+		return "", false, nil
+	}
 	ns := map[string]any{}
 	for _, id := range r.Refs {
 		v, ok := answers[id]
@@ -61,13 +77,29 @@ func compileRequirements(rs []Requirement, fs []CompiledFoundation) ([]CompiledR
 }
 
 func compileRequirement(i int, r Requirement, fs []CompiledFoundation) (CompiledRequirement, error) {
+	keys := r.Keys
+	if r.Key != "" {
+		keys = []string{r.Key}
+	}
 	switch {
 	case r.Kind != RequirementSecret:
 		return CompiledRequirement{}, fmt.Errorf("kind %q is unknown; only %s is", r.Kind, RequirementSecret)
-	case r.Key == "" || strings.Contains(r.Key, templateOpen):
+	case r.Key != "" && len(r.Keys) > 0:
+		return CompiledRequirement{}, fmt.Errorf("key and keys are exclusive")
+	case len(keys) == 0 || slices.ContainsFunc(keys, func(k string) bool { return k == "" || strings.Contains(k, templateOpen) }):
 		return CompiledRequirement{}, fmt.Errorf("key must be a non-empty literal")
+	case len(slices.Compact(slices.Sorted(slices.Values(keys)))) != len(keys):
+		return CompiledRequirement{}, fmt.Errorf("keys lists a key twice")
 	case strings.TrimSpace(r.Purpose) == "":
 		return CompiledRequirement{}, fmt.Errorf("purpose is missing")
+	}
+	for _, c := range r.When {
+		switch {
+		case c.Equals == "":
+			return CompiledRequirement{}, fmt.Errorf("when: %s: equals is missing", c.ID)
+		case !slices.ContainsFunc(fs, func(f CompiledFoundation) bool { return f.ID == c.ID }):
+			return CompiledRequirement{}, fmt.Errorf("when: %s is no foundation", c.ID)
+		}
 	}
 	t, refs, err := parseTemplate(fmt.Sprintf("requirements[%d]", i), r.Name)
 	if err != nil {
@@ -84,5 +116,6 @@ func compileRequirement(i int, r Requirement, fs []CompiledFoundation) (Compiled
 			return CompiledRequirement{}, fmt.Errorf("name references %s, which is no foundation", id)
 		}
 	}
-	return CompiledRequirement{Kind: r.Kind, Key: r.Key, Purpose: strings.TrimSpace(r.Purpose), Name: t, Refs: refs}, nil
+	return CompiledRequirement{Kind: r.Kind, Keys: slices.Clone(keys), Purpose: strings.TrimSpace(r.Purpose), Name: t, Refs: refs,
+		When: slices.Clone(r.When)}, nil
 }

@@ -23,9 +23,9 @@ func (r TargetRef) MarshalJSON() ([]byte, error) {
 }
 
 // Targets lists the chart keys answerID fans out to, sorted by path and each once: the targets that reference or
-// require it, or an answer whose default derives from it, transitively, and every target of a mechanism one of
-// whose targets does, because a mechanism renders as a whole. A const without requires is not listed. Nil when b
-// does not declare answerID.
+// require it or are gated on it by When, or an answer whose default derives from it, transitively, and every target
+// of a mechanism one of whose targets does, because a mechanism renders as a whole. An ungated const is not listed.
+// Nil when b does not declare answerID.
 func Targets(b model.Bundle, answerID string) []TargetRef {
 	if _, ok := b.Foundation(answerID); !ok {
 		return nil
@@ -40,7 +40,8 @@ func Targets(b model.Bundle, answerID string) []TargetRef {
 		}
 	}
 	targetReached := func(t model.CompiledTarget) bool {
-		return slices.ContainsFunc(t.Refs, reached) || slices.ContainsFunc(t.Requires, reached)
+		return slices.ContainsFunc(t.Refs, reached) || slices.ContainsFunc(t.Requires, reached) ||
+			slices.ContainsFunc(t.When, func(c model.TargetCondition) bool { return reached(c.ID) })
 	}
 	mechanisms := map[string]bool{}
 	for _, id := range b.FoundationOrder() {
@@ -61,6 +62,31 @@ func Targets(b model.Bundle, answerID string) []TargetRef {
 			}
 		}
 	}
+	return sortRefs(refs)
+}
+
+// ModeTargets lists the chart keys mode of dependency dep may write, sorted by path and each once: the targets gated on
+// that mode, the per-ingress ones of every row included. Nil when b has no such dependency.
+func ModeTargets(b model.Bundle, dep, mode string) []TargetRef {
+	modeID := model.InfraModeID(dep)
+	if _, ok := b.Foundation(modeID); !ok {
+		return nil
+	}
+	chosen := model.TargetCondition{ID: modeID, Equals: mode}
+	refs := []TargetRef{}
+	for _, f := range b.CompiledFoundations() {
+		for _, t := range f.Targets {
+			if slices.Contains(t.When, chosen) {
+				k, _ := t.Path[0].Key()
+				refs = append(refs, TargetRef{Path: slices.Clone(t.Path), Component: k})
+			}
+		}
+	}
+	return sortRefs(refs)
+}
+
+// sortRefs sorts refs by path and drops repeats.
+func sortRefs(refs []TargetRef) []TargetRef {
 	slices.SortFunc(refs, func(a, b TargetRef) int { return comparePaths(a.Path, b.Path) })
 	// A resources table writes each path once per profile, and keyed elements share their list's path.
 	return slices.CompactFunc(refs, func(a, b TargetRef) bool { return comparePaths(a.Path, b.Path) == 0 })

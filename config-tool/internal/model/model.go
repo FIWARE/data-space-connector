@@ -321,9 +321,12 @@ func readBundle(fsys fs.FS, file string) (versioned, error) {
 	if err := compileInfrastructure(&b); err != nil {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
-	if b.requirements, err = compileRequirements(b.RequirementsTable, b.foundations); err != nil {
+	rs, err := compileRequirements(b.RequirementsTable, b.foundations)
+	if err != nil {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
+	// The infrastructure's requirements, compiled with its foundations, follow the table's.
+	b.requirements = append(rs, b.requirements...)
 	if b.mechanisms, err = compileMechanisms(b.MechanismsTable, b.foundations, b.TopLevelKeys); err != nil {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}

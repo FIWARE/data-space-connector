@@ -149,7 +149,7 @@ function Secrets({ secrets }: { secrets: readonly RequiredSecret[] }) {
       <h4 id="egress-secrets">{SECRETS_HEADING}</h4>
       <ul>
         {secrets.map((s) => (
-          <li key={`${s.name}#${s.key}`}>{secretLine(s.namespace, s.name, s.key, s.purpose)}</li>
+          <li key={s.name}>{secretLine(s.namespace, s.name, s.keys, s.purpose)}</li>
         ))}
       </ul>
     </div>

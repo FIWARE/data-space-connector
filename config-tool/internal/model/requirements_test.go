@@ -1,6 +1,7 @@
 package model
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -35,6 +36,13 @@ func TestRequirementsValidation(t *testing.T) {
 		{"no purpose", `{kind: secret, name: "{{ .ca.privateSecret }}", key: ca.crt}`, "purpose is missing"},
 		{"literal name", `{kind: secret, name: private-ca, key: ca.crt, purpose: p}`, "references no answer"},
 		{"reserved ref", `{kind: secret, name: "{{ .target.namespace }}-ca", key: ca.crt, purpose: p}`, "reserved"},
+		{"key and keys", `{kind: secret, name: "{{ .ca.privateSecret }}", key: ca.crt, keys: [tls.crt], purpose: p}`, "key and keys are exclusive"},
+		{"empty keys entry", `{kind: secret, name: "{{ .ca.privateSecret }}", keys: [tls.crt, ""], purpose: p}`, "key must be a non-empty literal"},
+		{"repeated key", `{kind: secret, name: "{{ .ca.privateSecret }}", keys: [tls.crt, tls.crt], purpose: p}`, "keys lists a key twice"},
+		{"when without equals", `{kind: secret, name: "{{ .ca.privateSecret }}", key: ca.crt, purpose: p, when: [{id: ca.privateSecret}]}`,
+			"when: ca.privateSecret: equals is missing"},
+		{"when on no foundation", `{kind: secret, name: "{{ .ca.privateSecret }}", key: ca.crt, purpose: p, when: [{id: proxy.https, equals: x}]}`,
+			"when: proxy.https is no foundation"},
 		{"unknown answer", `{kind: secret, name: "{{ .proxy.https }}", key: ca.crt, purpose: p}`, "proxy.https, which is no foundation"},
 	}
 	for _, tc := range tests {
@@ -53,7 +61,7 @@ func TestRequirementResolve(t *testing.T) {
 		t.Fatal(err)
 	}
 	rs := b.Requirements()
-	if len(rs) != 1 || rs[0].Purpose != "The CA." || rs[0].Key != "ca.crt" {
+	if len(rs) != 1 || rs[0].Purpose != "The CA." || !slices.Equal(rs[0].Keys, []string{"ca.crt"}) {
 		t.Fatalf("requirements = %+v, want one trimmed row", rs)
 	}
 	tests := []struct {

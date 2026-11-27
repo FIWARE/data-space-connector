@@ -96,8 +96,7 @@ func composeLists(b model.Bundle, r resolution, opts Options) ([]Leaf, []Withhel
 	table := b.ListTable()
 	owned := make([][]*ownedElement, len(table))
 	unready := map[group]bool{}
-	for _, decl := range b.Foundations {
-		f, _ := b.Foundation(decl.ID)
+	for _, f := range b.CompiledFoundations() {
 		for i, t := range f.Targets {
 			if t.Element == nil {
 				continue
@@ -321,8 +320,7 @@ func eachLeaves(b model.Bundle, r resolution, opts Options) ([]Leaf, error) {
 		return nil, nil
 	}
 	var leaves []Leaf
-	for _, decl := range b.Foundations {
-		f, _ := b.Foundation(decl.ID)
+	for _, f := range b.CompiledFoundations() {
 		for i, t := range f.Targets {
 			if t.Each == nil || !all(r.answers, t.Refs) || !all(r.answers, t.Requires) {
 				continue

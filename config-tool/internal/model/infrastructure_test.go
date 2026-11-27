@@ -37,7 +37,7 @@ func TestInfrastructureCompile(t *testing.T) {
 		"domain.base", "host.keycloak",
 		modeAnswer, "infra.certManager.type", "infra.certManager.acmeEmail", "infra.certManager.namespace",
 		"infra.certManager.issuer", "infra.certManager.secret.apisix", "infra.certManager.secret.keycloak",
-		"infra.database.mode",
+		"infra.database.mode", "infra.database.credentials",
 	}
 	if !reflect.DeepEqual(compiled, want) {
 		t.Errorf("CompiledFoundations = %v, want %v", compiled, want)
