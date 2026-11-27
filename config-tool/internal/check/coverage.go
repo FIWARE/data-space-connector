@@ -67,8 +67,7 @@ func caCoverage(b model.Bundle, r model.CheckRule, tree render.Tree, v chartValu
 
 // mechanismInEffect reports whether every target of mechanism m wrote at least one owned leaf, each in effect.
 func mechanismInEffect(b model.Bundle, tree render.Tree, m string) bool {
-	for _, decl := range b.Foundations {
-		f, _ := b.Foundation(decl.ID)
+	for _, f := range b.CompiledFoundations() {
 		for i, t := range f.Targets {
 			if t.Mechanism != m {
 				continue

@@ -34,6 +34,6 @@ export function noProxyGaps(count: number): string {
 }
 
 /** One Secret the user creates in the release namespace. */
-export function secretLine(namespace: string | undefined, name: string, key: string, purpose: string): string {
-  return `Secret ${namespace ? `${namespace}/` : ''}${name}, key ${key}: ${purpose}`
+export function secretLine(namespace: string | undefined, name: string, keys: readonly string[], purpose: string): string {
+  return `Secret ${namespace ? `${namespace}/` : ''}${name}, ${keys.length === 1 ? 'key' : 'keys'} ${keys.join(', ')}: ${purpose}`
 }

@@ -273,7 +273,9 @@ Code only, tested against fixture bundles. The shipped bundle does not change ye
   its `host.*`), and the `infrastructure:` entry `certManager` with the title "TLS certificates (cert-manager)",
   `clusterWide: true`, the mode labels of MOCKUPS.md#s4--infrastructure ("Install cert-manager with the connector",
   "Use the cert-manager already in the cluster", "I provide a TLS Secret per host"), and the questions and targets
-  of the decision table. Bump `revision: 18` → `19`. The trust-anchor bundle (`model/1.3.6`) gets no entry.
+  of the decision table. `external`'s `perIngressQuestion` `secret` carries
+  `requirement: {kind: secret, keys: [tls.crt, tls.key], purpose: ...}` (no `name`; step 3 shape, ADR 0026).
+  Bump `revision: 18` → `19`. The trust-anchor bundle (`model/1.3.6`) gets no entry.
 - Tests in `config-tool/internal/render/infrastructure_test.go` (new), using the shipped bundle:
   - **Exact key set per mode (table-driven, one row per mode):** render with every question of the mode answered
     and every host derived from `domain.base`. The set of leaves whose provenance is `infra.certManager.*` must equal
@@ -345,6 +347,8 @@ Code only, tested against fixture bundles. The shipped bundle does not change ye
     `external` shows one row per ingress (label, Secret name);
   - *Ask later* (`chrome/AskLater.tsx`) on the mode and on each question, using the open ids from Step 2;
   - an optional "writes" disclosure listing the mode's keys.
+  - Decide whether Stage 3's "writes" disclosure should keep listing the per-ingress cert-manager keys: `render.Targets`
+    of a host (or `domain.base`) reaches them through the expanded targets' `requires` (review of PR #52).
 
   UI copy that is not bundle data goes into `ui/src/stages/infrastructureText.ts`, like the other `*Text.ts` files.
 - `ui/src/state/issues.ts` counts these as Stage 4 open questions: an unchosen mode, plus the unanswered questions

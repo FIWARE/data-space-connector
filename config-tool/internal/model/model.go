@@ -321,9 +321,12 @@ func readBundle(fsys fs.FS, file string) (versioned, error) {
 	if err := compileInfrastructure(&b); err != nil {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
-	if b.requirements, err = compileRequirements(b.RequirementsTable, b.foundations); err != nil {
+	rs, err := compileRequirements(b.RequirementsTable, b.foundations)
+	if err != nil {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
+	// The infrastructure's requirements, compiled with its foundations, follow the table's.
+	b.requirements = append(rs, b.requirements...)
 	if b.mechanisms, err = compileMechanisms(b.MechanismsTable, b.foundations, b.TopLevelKeys); err != nil {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
@@ -372,7 +375,7 @@ func checkRuleRoots(rules []CompiledRule, keys []string) error {
 // back-derived (ADR 0026), so no rule may answer one.
 func checkRecognizedFoundations(rules []CompiledRule, fs []CompiledFoundation) error {
 	for i, r := range rules {
-		if isInfraID(r.Answer) {
+		if IsInfraID(r.Answer) {
 			return fmt.Errorf("recognize[%d]: answer %q lies under %s, which comes from the profile only", i, r.Answer, InfraIDPrefix)
 		}
 		j := slices.IndexFunc(fs, func(f CompiledFoundation) bool { return f.ID == r.Answer })

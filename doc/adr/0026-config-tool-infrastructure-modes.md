@@ -24,9 +24,9 @@ way to say "only while this mode is chosen".
 ### 1. `infrastructure:` and `ingresses:` in the bundle, compiled into synthetic foundations
 
 A bundle declares its dependencies under `infrastructure:` as `{id, title, help, doc, clusterWide, modes}`. A mode is
-`{id, label, note, warning, doc, development, productionDoc, targets, questions, perIngress, perIngressQuestion}`, and
-a question has the same fields as a foundation plus `when: {question, equals}` and `readOnly`. The bundle compile turns
-each dependency into ordinary compiled foundations with the reserved prefix `infra.`:
+`{id, label, note, warning, doc, development, productionDoc, targets, questions, perIngress, perIngressQuestion,
+requirements}`, and a question has the same fields as a foundation plus `when: {question, equals}` and `readOnly`. The
+bundle compile turns each dependency into ordinary compiled foundations with the reserved prefix `infra.`:
 
 - `infra.<dep>.mode`, a choice of the dependency's modes without a default, so a mode nobody chose renders nothing;
 - `infra.<dep>.<question>` for every question of every mode;
@@ -38,7 +38,8 @@ keep working without a second engine.
 
 The synthetic foundations are in `Bundle.CompiledFoundations()`, `FoundationOrder()` and `Foundation(id)`, but never in
 the declared `b.Foundations`, which is Stage 3's list. Every caller that ranges over foundations chooses which list it
-means.
+means. The answer lists of Stage 3 and Review (`render.HandSet`, `render.DerivedDiff`) are keyed by `answers.<id>`, so
+they skip `infra.*` ids (`model.IsInfraID`), whether the mode is chosen or not.
 
 Ids are one `idSegment` each: dependency (`certManager`, not `cert-manager`), question and ingress. Only the per-ingress
 expansion produces a two-segment local id. Uniqueness across modes, the reserved id `mode` and the nesting check run on
@@ -65,8 +66,10 @@ its own: conditions do not chain, so a shown question never depends on a hidden 
 each other.
 
 Requirement rows (Secrets listed for NEXT_STEPS.md) get the same `When` gating and an optional `keys` list (exactly one
-of `key`/`keys`). In `external`, each per-ingress Secret is listed once, with keys `tls.crt` and `tls.key`, and only
-while that mode is chosen.
+of `key`/`keys`). A mode declares its own rows under `requirements:`, gated on that mode. A `perIngressQuestion` may
+carry one `requirement:` without a `name`: it expands per row, the answer is the name, and it also needs the row's owner.
+`requirements.Secrets` lists each Secret once and merges the keys of rows that name the same one. In `external`, each
+per-ingress Secret is listed once, with keys `tls.crt` and `tls.key`, and only while that mode is chosen.
 
 In `Render`, the `When` check runs before refs and requires. A target of an inactive mode is skipped without marking
 its lists incomplete, so it never drops the TLS blocks of the active render.

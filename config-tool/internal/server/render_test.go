@@ -225,7 +225,7 @@ func TestRenderListsSecrets(t *testing.T) {
 				if s.Purpose == "" {
 					t.Errorf("secret %+v has no purpose", s)
 				}
-				secrets = append(secrets, s.Namespace+"/"+s.Name+"#"+s.Key)
+				secrets = append(secrets, s.Namespace+"/"+s.Name+"#"+strings.Join(s.Keys, ","))
 			}
 			if !slices.Equal(secrets, tc.want) {
 				t.Errorf("secrets = %v, want %v", secrets, tc.want)

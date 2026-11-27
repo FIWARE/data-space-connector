@@ -117,7 +117,7 @@ func Diff(b model.Bundle, prev, next Tree) TreeDiff {
 		add(p.Provenance.Foundation, Change{Path: p.Path, Status: StatusRemoved, Before: was, HasBefore: wasOK})
 	}
 	var order, extra []string
-	for _, f := range b.Foundations {
+	for _, f := range b.CompiledFoundations() {
 		if _, ok := groups[f.ID]; ok {
 			order = append(order, f.ID)
 		}

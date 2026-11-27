@@ -55,6 +55,8 @@ type Mode struct {
 	PerIngress []IngressTarget `yaml:"perIngress"`
 	// PerIngressQuestion is asked once per ingresses row, as <id>.<ingress id>.
 	PerIngressQuestion *IngressQuestion `yaml:"perIngressQuestion"`
+	// Requirements apply only while the mode is chosen.
+	Requirements []Requirement `yaml:"requirements"`
 }
 
 // Question is one question of a mode, compiled into the foundation infra.<dependency>.<id>.
@@ -99,6 +101,9 @@ type IngressQuestion struct {
 	Key   string         `yaml:"key"`
 	// Replaces writes over the unconditional foundation target at Key, whose value becomes the default.
 	Replaces bool `yaml:"replaces"`
+	// Requirement is listed once per row while the mode is chosen and the row's owner resolves; it has no name of
+	// its own, the answer is the name.
+	Requirement *Requirement `yaml:"requirement"`
 }
 
 // Ingress is one ingress whose TLS the tool owns: Path is its block, Owner the foundation that writes
@@ -143,9 +148,16 @@ func InfraQuestionID(dep, question string) string {
 	return InfraIDPrefix + dep + idSeparator + question
 }
 
-// isInfraID reports whether id is, or lies under, the reserved infra namespace.
-func isInfraID(id string) bool {
+// IsInfraID reports whether id is, or lies under, the reserved infra namespace of the synthetic foundations.
+func IsInfraID(id string) bool {
 	return id == strings.TrimSuffix(InfraIDPrefix, idSeparator) || strings.HasPrefix(id, InfraIDPrefix)
+}
+
+// infraRequirement is a requirement of a mode, compiled once every synthetic foundation it may name exists.
+type infraRequirement struct {
+	where    string
+	r        Requirement
+	requires []string
 }
 
 // ingressRow is a validated ingresses row.
@@ -160,7 +172,7 @@ type ingressRow struct {
 // re-checks them together with the declared ones, which must stay out of the infra namespace.
 func compileInfrastructure(b *Bundle) error {
 	for i, f := range b.Foundations {
-		if isInfraID(f.ID) {
+		if IsInfraID(f.ID) {
 			return fmt.Errorf("foundations[%d]: id %q lies under %s, which only the infrastructure list compiles", i, f.ID, InfraIDPrefix)
 		}
 	}
@@ -172,15 +184,20 @@ func compileInfrastructure(b *Bundle) error {
 		return err
 	}
 	var synthetic []CompiledFoundation
+	var pending []infraRequirement
 	for i, d := range b.Infrastructure {
 		if j := slices.IndexFunc(b.Infrastructure[:i], func(o Dependency) bool { return o.ID == d.ID }); j >= 0 {
 			return fmt.Errorf("infrastructure[%d]: id %q is already declared by infrastructure[%d]", i, d.ID, j)
 		}
-		fs, err := compileDependency(d, rows, b.foundations, b.TopLevelKeys)
+		fs, rs, err := compileDependency(d, rows, b.foundations, b.TopLevelKeys)
 		if err != nil {
 			return fmt.Errorf("infrastructure[%d] (%s): %w", i, d.ID, err)
 		}
 		synthetic = append(synthetic, fs...)
+		for j := range rs {
+			rs[j].where = fmt.Sprintf("infrastructure[%d] (%s): %s", i, d.ID, rs[j].where)
+		}
+		pending = append(pending, rs...)
 	}
 	all := slices.Concat(b.foundations, synthetic)
 	for _, check := range []func([]CompiledFoundation) error{checkIDNesting, checkRefs, checkTargetPaths} {
@@ -191,6 +208,14 @@ func compileInfrastructure(b *Bundle) error {
 	order, err := topoOrder(all)
 	if err != nil {
 		return err
+	}
+	for i, p := range pending {
+		c, err := compileRequirement(i, p.r, all)
+		if err != nil {
+			return fmt.Errorf("%s: %w", p.where, err)
+		}
+		c.Requires = p.requires
+		b.requirements = append(b.requirements, c)
 	}
 	b.foundations, b.order = all, order
 	return nil
@@ -263,54 +288,60 @@ func compileIngresses(ingresses []Ingress, fs []CompiledFoundation, topLevelKeys
 }
 
 // compileDependency compiles d into its mode foundation and one foundation per question, expanding the per-ingress
-// targets and question over rows; fs are the declared foundations, compiled.
-func compileDependency(d Dependency, rows []ingressRow, fs []CompiledFoundation, topLevelKeys []string) ([]CompiledFoundation, error) {
+// targets and question over rows, and returns its requirements, gated on their mode, to compile once all ids exist;
+// fs are the declared foundations, compiled.
+func compileDependency(d Dependency, rows []ingressRow, fs []CompiledFoundation, topLevelKeys []string) ([]CompiledFoundation, []infraRequirement, error) {
 	switch {
 	case !idSegment.MatchString(d.ID):
-		return nil, fmt.Errorf("id %q is not a letter or '_' followed by letters, digits and '_'", d.ID)
+		return nil, nil, fmt.Errorf("id %q is not a letter or '_' followed by letters, digits and '_'", d.ID)
 	case d.Title == "":
-		return nil, fmt.Errorf("title is missing")
+		return nil, nil, fmt.Errorf("title is missing")
 	case len(d.Modes) == 0:
-		return nil, fmt.Errorf("modes is empty")
+		return nil, nil, fmt.Errorf("modes is empty")
 	}
 	if err := checkOptionalDoc("doc", d.Doc); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	options := make([]Option, len(d.Modes))
 	for i, m := range d.Modes {
 		if err := checkMode(d, i); err != nil {
-			return nil, fmt.Errorf("modes[%d] (%s): %w", i, m.ID, err)
+			return nil, nil, fmt.Errorf("modes[%d] (%s): %w", i, m.ID, err)
 		}
 		options[i] = Option{Value: m.ID, Label: m.Label, Note: m.Note}
 	}
 	modeID := InfraModeID(d.ID)
 	mode, err := compileFoundation(Foundation{ID: modeID, Stage: StageInfrastructure, Type: TypeChoice, Label: d.Title, Options: options}, topLevelKeys)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	mode.Group = ""
 	// seen maps every local question id, per-ingress ones expanded, to where it is declared.
 	seen := map[string]string{}
 	var questions []CompiledFoundation
+	var requirements []infraRequirement
 	for i, m := range d.Modes {
 		where := fmt.Sprintf("modes[%d] (%s)", i, m.ID)
 		when := []TargetCondition{{ID: modeID, Equals: m.ID}}
+		for j, r := range m.Requirements {
+			r.When = slices.Concat(when, r.When)
+			requirements = append(requirements, infraRequirement{where: fmt.Sprintf("%s: requirements[%d]", where, j), r: r})
+		}
 		for j, t := range m.Targets {
 			ct, err := compileInfraTarget(modeID, t, when, topLevelKeys)
 			if err != nil {
-				return nil, fmt.Errorf("%s: targets[%d]: %w", where, j, err)
+				return nil, nil, fmt.Errorf("%s: targets[%d]: %w", where, j, err)
 			}
 			mode.Targets = append(mode.Targets, ct)
 		}
 		if (len(m.PerIngress) > 0 || m.PerIngressQuestion != nil) && len(rows) == 0 {
-			return nil, fmt.Errorf("%s: perIngress and perIngressQuestion need the ingresses table", where)
+			return nil, nil, fmt.Errorf("%s: perIngress and perIngressQuestion need the ingresses table", where)
 		}
 		for j, pt := range m.PerIngress {
 			for _, r := range rows {
 				t := Target{Path: r.Path + idSeparator + pt.Key, Fn: pt.Fn, Args: pt.Args, Sep: pt.Sep, Requires: r.requires}
 				ct, err := compileInfraTarget(modeID, t, when, topLevelKeys)
 				if err != nil {
-					return nil, fmt.Errorf("%s: perIngress[%d] (%s): %w", where, j, r.ID, err)
+					return nil, nil, fmt.Errorf("%s: perIngress[%d] (%s): %w", where, j, r.ID, err)
 				}
 				mode.Targets = append(mode.Targets, ct)
 			}
@@ -318,12 +349,12 @@ func compileDependency(d Dependency, rows []ingressRow, fs []CompiledFoundation,
 		for j, q := range m.Questions {
 			qw := fmt.Sprintf("%s: questions[%d] (%s)", where, j, q.ID)
 			if err := checkQuestionID(q.ID, seen); err != nil {
-				return nil, fmt.Errorf("%s: %w", qw, err)
+				return nil, nil, fmt.Errorf("%s: %w", qw, err)
 			}
 			seen[q.ID] = qw
 			c, err := compileQuestion(d.ID, m, q, when, topLevelKeys)
 			if err != nil {
-				return nil, fmt.Errorf("%s: %w", qw, err)
+				return nil, nil, fmt.Errorf("%s: %w", qw, err)
 			}
 			questions = append(questions, c)
 		}
@@ -336,25 +367,34 @@ func compileDependency(d Dependency, rows []ingressRow, fs []CompiledFoundation,
 		}
 		qw := fmt.Sprintf("modes[%d] (%s): perIngressQuestion (%s)", i, m.ID, q.ID)
 		if other, ok := seen[q.ID]; ok {
-			return nil, fmt.Errorf("%s shares its id with %s; it expands to %s.<ingress id>, which nests under it", qw, other, q.ID)
+			return nil, nil, fmt.Errorf("%s shares its id with %s; it expands to %s.<ingress id>, which nests under it", qw, other, q.ID)
 		}
 		if err := checkQuestionID(q.ID, seen); err != nil {
-			return nil, fmt.Errorf("%s: %w", qw, err)
+			return nil, nil, fmt.Errorf("%s: %w", qw, err)
 		}
 		for _, r := range rows {
 			local := q.ID + idSeparator + r.ID
 			if other, ok := seen[local]; ok {
-				return nil, fmt.Errorf("%s: id %q is already declared by %s", qw, local, other)
+				return nil, nil, fmt.Errorf("%s: id %q is already declared by %s", qw, local, other)
 			}
 			seen[local] = qw
-			c, err := compileIngressQuestion(d.ID, *q, r, fs, []TargetCondition{{ID: modeID, Equals: m.ID}}, topLevelKeys)
+			when := []TargetCondition{{ID: modeID, Equals: m.ID}}
+			c, err := compileIngressQuestion(d.ID, *q, r, fs, when, topLevelKeys)
 			if err != nil {
-				return nil, fmt.Errorf("%s: %s: %w", qw, r.ID, err)
+				return nil, nil, fmt.Errorf("%s: %s: %w", qw, r.ID, err)
 			}
 			questions = append(questions, c)
+			if q.Requirement != nil {
+				if q.Requirement.Name != "" {
+					return nil, nil, fmt.Errorf("%s: requirement: name is the answer, so it is not declared", qw)
+				}
+				req := *q.Requirement
+				req.Name, req.When = "{{ ."+c.ID+" }}", slices.Concat(when, req.When)
+				requirements = append(requirements, infraRequirement{where: fmt.Sprintf("%s: %s: requirement", qw, r.ID), r: req, requires: r.requires})
+			}
 		}
 	}
-	return append([]CompiledFoundation{mode}, questions...), nil
+	return append([]CompiledFoundation{mode}, questions...), requirements, nil
 }
 
 // checkMode validates mode i of d apart from its targets and questions.

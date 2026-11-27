@@ -72,7 +72,13 @@ infrastructure:
         targets:
           - {path: cert-manager.enabled, fn: const, args: [false]}
           - {path: certManagerResources.enabled, fn: const, args: [false]}
-        perIngressQuestion: {id: secret, type: secretName, label: TLS Secret, key: 'tls[0].secretName', replaces: true}
+        perIngressQuestion:
+          id: secret
+          type: secretName
+          label: TLS Secret
+          key: 'tls[0].secretName'
+          replaces: true
+          requirement: {kind: secret, keys: [tls.crt, tls.key], purpose: The certificate and key of the host.}
   - id: database
     title: Database
     modes:
@@ -84,6 +90,8 @@ infrastructure:
       - id: external
         label: Use an external database
         targets: [{path: postgres.enabled, fn: const, args: [false]}]
+        questions: [{id: credentials, type: secretName, label: Credentials Secret}]
+        requirements: [{kind: secret, name: "{{ .infra.database.credentials }}", key: password, purpose: The database password.}]
 rules:
   - id: acme-email-for-prod-issuer
     severity: error

@@ -111,7 +111,7 @@ export interface RequiredSecret {
   /** Empty while Stage 1 leaves the namespace unanswered. */
   namespace?: string
   name: string
-  key: string
+  keys: string[]
   purpose: string
 }
 
