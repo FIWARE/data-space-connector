@@ -174,12 +174,13 @@ func (s *Server) resetRender() {
 	s.lastProfile = profile.Profile{}
 }
 
-// handleFoundations lists the foundations of chart@version; an empty version means the latest.
-func (s *Server) handleFoundations(w http.ResponseWriter, r *http.Request) {
+// queriedBundle is the bundle of the chart and version query parameters, an empty version meaning the latest;
+// false after writing the error.
+func (s *Server) queriedBundle(w http.ResponseWriter, r *http.Request) (model.Bundle, bool) {
 	bundles, err := model.Versions(s.models)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error(), "")
-		return
+		return model.Bundle{}, false
 	}
 	chart, version := r.URL.Query().Get(queryChart), r.URL.Query().Get(queryVersion)
 	i := slices.IndexFunc(bundles, func(b model.Bundle) bool {
@@ -187,9 +188,17 @@ func (s *Server) handleFoundations(w http.ResponseWriter, r *http.Request) {
 	})
 	if i < 0 {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("no bundle for chart %q version %q", chart, version), "")
+		return model.Bundle{}, false
+	}
+	return bundles[i], true
+}
+
+// handleFoundations lists the foundations of chart@version; an empty version means the latest.
+func (s *Server) handleFoundations(w http.ResponseWriter, r *http.Request) {
+	b, ok := s.queriedBundle(w, r)
+	if !ok {
 		return
 	}
-	b := bundles[i]
 	body := foundationsResponse{Foundations: make([]foundationBody, 0, len(b.Foundations)), Resources: newResourcesBody(b.Resources)}
 	for _, f := range b.Foundations {
 		targets := render.Targets(b, f.ID)

@@ -27,8 +27,9 @@ type Options struct {
 	Overrides *load.Result
 }
 
-// Render evaluates b's foundation targets over p's answers. It errors on an answer b does not
-// declare and on a derived answer its type refuses; an unanswered target, or one whose requires are, writes nothing.
+// Render evaluates b's foundation targets, synthetic ones included, over p's answers. It errors on an answer b does
+// not declare and on a derived answer its type refuses; an unanswered target, one whose requires are, or one whose
+// When does not hold writes nothing.
 func Render(b model.Bundle, p profile.Profile, opts Options) (Tree, error) {
 	r, err := resolve(b, p)
 	if err != nil {
@@ -36,12 +37,17 @@ func Render(b model.Bundle, p profile.Profile, opts Options) (Tree, error) {
 	}
 	leaves := []Leaf{}
 	incomplete := map[string]bool{}
+	// replaced holds the paths a rendered replacing target writes; the replaced foundation leaf there is dropped.
+	replaced := map[string]bool{}
 	// blocks maps a leaf's path to the block its target writes as one unit.
 	blocks := map[string]roundtrip.Path{}
-	for _, decl := range b.Foundations {
-		f, _ := b.Foundation(decl.ID)
+	for _, f := range b.CompiledFoundations() {
 		for i, t := range f.Targets {
 			if t.Element != nil || t.Each != nil {
+				continue
+			}
+			// Before the refs: an inactive mode's unresolved target must not drop a list the active render writes.
+			if !holdAll(t.When, r.answers) {
 				continue
 			}
 			if !all(r.answers, t.Refs) || !all(r.answers, t.Requires) {
@@ -60,11 +66,15 @@ func Render(b model.Bundle, p profile.Profile, opts Options) (Tree, error) {
 			leaves = append(leaves, Leaf{Path: slices.Clone(t.Path), Value: v, Provenance: Provenance{
 				Foundation: f.ID, Answers: append([]string{}, t.Refs...), Fn: string(t.Fn), Target: i,
 			}})
+			if t.Replaces {
+				replaced[t.Path.String()] = true
+			}
 			if t.Block != nil {
 				blocks[t.Path.String()] = t.Block
 			}
 		}
 	}
+	leaves = slices.DeleteFunc(leaves, func(l Leaf) bool { return replaced[l.Path.String()] && !replaces(b, l) })
 	// An owned list is written whole or not at all, so a fragment never replaces the chart's list.
 	leaves = slices.DeleteFunc(leaves, func(l Leaf) bool {
 		return slices.ContainsFunc(lists(l.Path), func(k roundtrip.Path) bool { return incomplete[k.String()] })
@@ -108,9 +118,16 @@ func (r resolution) resolved(ids []string) bool {
 	return !slices.ContainsFunc(ids, func(id string) bool { _, ok := r.answers[id]; return !ok && !r.reserved[id] })
 }
 
+// givenAnswers returns p's answers plus its infrastructure answers under their synthetic ids.
+func givenAnswers(p profile.Profile) map[string]any {
+	out := p.InfraAnswers()
+	maps.Copy(out, p.Answers)
+	return out
+}
+
 // resolve returns p's given answers plus the derived defaults, seeding the reserved target refs from p's target. It errors when a resolved answer does not start with its prefix.
 func resolve(b model.Bundle, p profile.Profile) (resolution, error) {
-	given := p.Answers
+	given := givenAnswers(p)
 	for _, id := range slices.Sorted(maps.Keys(given)) {
 		if _, ok := b.Foundation(id); !ok {
 			return resolution{}, fmt.Errorf("render: answer %q is not declared by bundle %s %s", id, b.Chart, b.Version)
@@ -152,9 +169,10 @@ func resolve(b model.Bundle, p profile.Profile) (resolution, error) {
 	return r, nil
 }
 
-// defaults reports whether f's default applies: it has one, its default refs are resolved and DefaultWhen holds.
+// defaults reports whether f's default applies: it has one, its default refs are resolved, and DefaultWhen and
+// AskedWhen hold.
 func defaults(f model.CompiledFoundation, r resolution) bool {
-	if f.DefaultTemplate() == nil || !r.resolved(f.DefaultRefs()) {
+	if f.DefaultTemplate() == nil || !r.resolved(f.DefaultRefs()) || !holdAll(f.AskedWhen, r.answers) {
 		return false
 	}
 	return f.DefaultWhen == nil || f.DefaultWhen.Holds(r.answers)
@@ -173,6 +191,17 @@ func checkPrefix(f model.CompiledFoundation, v any, r resolution) error {
 		return fmt.Errorf("render: %s must start with %q, which %s sets", f.ID, prefix, strings.Join(f.PrefixRefs(), ", "))
 	}
 	return nil
+}
+
+// holdAll reports whether every condition of cs holds over the resolved answers.
+func holdAll(cs []model.TargetCondition, answers map[string]any) bool {
+	return !slices.ContainsFunc(cs, func(c model.TargetCondition) bool { return !c.Holds(answers) })
+}
+
+// replaces reports whether l was written by a replacing target.
+func replaces(b model.Bundle, l Leaf) bool {
+	f, _ := b.Foundation(l.Provenance.Foundation)
+	return f.Targets[l.Provenance.Target].Replaces
 }
 
 func all(answers map[string]any, ids []string) bool {

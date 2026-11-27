@@ -57,22 +57,22 @@ func Evaluate(b model.Bundle, p profile.Profile, opts render.Options) ([]Finding
 			fs = didWebHost(r, answers)
 		// Before the plain when case: a memoryLimit rule's when is only its precondition.
 		case r.MemoryLimit != nil:
-			if allHold(r.When, p, answers) {
+			if allHold(b, r.When, p, answers) {
 				fs, err = memoryLimit(b, r, values)
 			}
 		case r.CACoverage != nil:
-			if allHold(r.When, p, answers) {
+			if allHold(b, r.When, p, answers) {
 				fs, err = caCoverage(b, r, tree, values)
 			}
 		case r.NoProxyCoverage != nil:
-			if allHold(r.When, p, answers) {
+			if allHold(b, r.When, p, answers) {
 				fs, err = noProxyCoverage(b, r, p, answers, values)
 			}
 		case r.ValueSet != nil:
-			if allHold(r.When, p, answers) && valueSet(r, values) {
+			if allHold(b, r.When, p, answers) && valueSet(r, values) {
 				fs = []Finding{finding(r, r.Field, "", r.Message)}
 			}
-		case allHold(r.When, p, answers):
+		case allHold(b, r.When, p, answers):
 			fs = []Finding{finding(r, r.Field, "", r.Message)}
 		}
 		if err != nil {
@@ -172,23 +172,23 @@ func label(b model.Bundle, id string) string {
 }
 
 // allHold reports whether every condition of ws holds.
-func allHold(ws []model.RuleWhen, p profile.Profile, answers map[string]any) bool {
-	return !slices.ContainsFunc(ws, func(w model.RuleWhen) bool { return !holds(w, p, answers) })
+func allHold(b model.Bundle, ws []model.RuleWhen, p profile.Profile, answers map[string]any) bool {
+	return !slices.ContainsFunc(ws, func(w model.RuleWhen) bool { return !holds(b, w, p, answers) })
 }
 
 // holds reports whether w's field resolves to w.Equals, or for Unset or Set whether the answer is absent or
 // resolves; an unanswered or non-string field never equals anything.
-func holds(w model.RuleWhen, p profile.Profile, answers map[string]any) bool {
+func holds(b model.Bundle, w model.RuleWhen, p profile.Profile, answers map[string]any) bool {
 	if w.Unset || w.Set {
-		_, ok := answers[strings.TrimPrefix(w.Field, model.AnswerFieldPrefix)]
+		_, ok := answers[answerID(b, w.Field)]
 		return ok == w.Set
 	}
-	v, ok := value(w.Field, p, answers)
+	v, ok := value(b, w.Field, p, answers)
 	return ok && v == w.Equals
 }
 
 // value reads a field the bundle validated as addressable.
-func value(field string, p profile.Profile, answers map[string]any) (string, bool) {
+func value(b model.Bundle, field string, p profile.Profile, answers map[string]any) (string, bool) {
 	if field == model.FieldTargetEnvironment {
 		return string(p.Target.Environment), p.Target.Environment != ""
 	}
@@ -198,7 +198,14 @@ func value(field string, p profile.Profile, answers map[string]any) (string, boo
 		}
 		return model.FeatureOff, true
 	}
-	id, _ := strings.CutPrefix(field, model.AnswerFieldPrefix)
-	s, ok := answers[id].(string)
+	s, ok := answers[answerID(b, field)].(string)
 	return s, ok
+}
+
+// answerID is the resolved-answer id of an answers.<id> or infrastructure.<dep>[.<q>] field.
+func answerID(b model.Bundle, field string) string {
+	if id, ok := b.InfraFieldAnswer(field); ok {
+		return id
+	}
+	return strings.TrimPrefix(field, model.AnswerFieldPrefix)
 }

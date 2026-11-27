@@ -55,11 +55,16 @@ type Bundle struct {
 	RequirementsTable []Requirement `yaml:"requirements"`
 	// MechanismsTable declares when a mechanism is withheld for what the chart templates itself (ADR 0025).
 	MechanismsTable []Mechanism `yaml:"mechanisms"`
+	// Infrastructure lists the Stage 4 dependencies, compiled into synthetic infra.* foundations (ADR 0026).
+	Infrastructure []Dependency `yaml:"infrastructure"`
+	// Ingresses lists every ingress whose TLS the tool owns; per-ingress targets and questions expand over it.
+	Ingresses []Ingress `yaml:"ingresses"`
 	// Latest marks the default version; Versions sets it, bundle files never do.
 	Latest bool `yaml:"-"`
 	// rules is Recognize compiled; readBundle sets it after validating every rule.
 	rules []CompiledRule
-	// foundations is Foundations compiled and order their topological order; both nil without foundations.
+	// foundations is Foundations compiled, followed by the synthetic infra.* foundations, and order their
+	// topological order; both nil without either.
 	foundations []CompiledFoundation
 	order       []string
 	// lists is Lists compiled.
@@ -313,9 +318,15 @@ func readBundle(fsys fs.FS, file string) (versioned, error) {
 	if b.foundations, b.order, err = compileFoundations(b.Foundations, b.lists, b.Resources, b.TopLevelKeys); err != nil {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
-	if b.requirements, err = compileRequirements(b.RequirementsTable, b.foundations); err != nil {
+	if err := compileInfrastructure(&b); err != nil {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
+	rs, err := compileRequirements(b.RequirementsTable, b.foundations)
+	if err != nil {
+		return versioned{}, fmt.Errorf("%s: %w", file, err)
+	}
+	// The infrastructure's requirements, compiled with its foundations, follow the table's.
+	b.requirements = append(rs, b.requirements...)
 	if b.mechanisms, err = compileMechanisms(b.MechanismsTable, b.foundations, b.TopLevelKeys); err != nil {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
@@ -360,9 +371,13 @@ func checkRuleRoots(rules []CompiledRule, keys []string) error {
 }
 
 // checkRecognizedFoundations refuses a rule that answers a foundation with another stage, or with a kind that
-// cannot read its type: toggle for a bool, value for a string type, nothing for a list.
+// cannot read its type: toggle for a bool, value for a string type, nothing for a list. infra.* answers are never
+// back-derived (ADR 0026), so no rule may answer one.
 func checkRecognizedFoundations(rules []CompiledRule, fs []CompiledFoundation) error {
 	for i, r := range rules {
+		if IsInfraID(r.Answer) {
+			return fmt.Errorf("recognize[%d]: answer %q lies under %s, which comes from the profile only", i, r.Answer, InfraIDPrefix)
+		}
 		j := slices.IndexFunc(fs, func(f CompiledFoundation) bool { return f.ID == r.Answer })
 		if j < 0 {
 			continue

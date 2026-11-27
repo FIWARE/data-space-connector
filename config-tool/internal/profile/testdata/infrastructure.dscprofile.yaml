@@ -1,0 +1,27 @@
+# dsc-config profile: the answer set values.yaml is rendered from. It never holds a secret value.
+format: 1
+model:
+  chart: data-space-connector
+  version: 10.16.0
+  revision: 1
+target:
+  type: file
+  namespace: provider
+  createNamespace: false
+  releaseName: provider
+  chart: data-space-connector
+  chartVersion: 10.16.0
+  environment: development
+answers:
+  host.keycloak: keycloak.127.0.0.1.nip.io
+infrastructure:
+  certManager:
+    mode: cluster
+    answers:
+      acmeEmail: ops@fiware.org
+      issuer: letsencrypt
+      secret.keycloak: keycloak-tls
+      type: prod
+open:
+  - field: infrastructure.certManager.acmeEmail
+secrets: {}

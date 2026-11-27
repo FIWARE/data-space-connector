@@ -36,7 +36,7 @@ const VERIFIER_VOLUMES = 'decentralizedIam.vcAuthentication.vcverifier.deploymen
 const VERIFIER_CA_CERT = 'decentralizedIam.vcAuthentication.vcverifier.deployment.serverCertificates.caCert.enabled'
 const ROUTE_PROXY = 'decentralizedIam.odrlAuthorization.apisix.routes[0].plugins.openid-connect.proxy_opts.https_proxy'
 const ROUTE_VERIFY = 'decentralizedIam.odrlAuthorization.apisix.routes[0].plugins.openid-connect.ssl_verify'
-const CA_SECRET: RequiredSecret = { namespace: NAMESPACE, name: CA, key: 'ca.crt', purpose: 'The PEM bundle of the private CA.' }
+const CA_SECRET: RequiredSecret = { namespace: NAMESPACE, name: CA, keys: ['ca.crt'], purpose: 'The PEM bundle of the private CA.' }
 
 const leaf = (path: string, value: unknown, foundation: string, element?: string): Leaf => ({
   path,
@@ -318,6 +318,6 @@ describe('EgressPanel', () => {
   it('lists the CA Secret the user creates before installing', async () => {
     renderPanel({ 'ca.privateSecret': CA })
     const secrets = await within(await panel()).findByRole('group', { name: SECRETS_HEADING })
-    expect(within(secrets).getByText(secretLine(NAMESPACE, CA, CA_SECRET.key, CA_SECRET.purpose))).toBeInTheDocument()
+    expect(within(secrets).getByText(secretLine(NAMESPACE, CA, CA_SECRET.keys, CA_SECRET.purpose))).toBeInTheDocument()
   })
 })

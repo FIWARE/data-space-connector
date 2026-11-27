@@ -46,6 +46,9 @@ type ChartSwitch struct {
 	CarriedAnswers []string `json:"carriedAnswers"`
 	// DroppedAnswers are the other answer ids, with their open questions; sorted, never nil.
 	DroppedAnswers []string `json:"droppedAnswers"`
+	// DroppedInfrastructure are the infrastructure.<dependency> fields dropped, with their open questions, since
+	// Stage 4 answers are chart-specific; sorted, nil when none.
+	DroppedInfrastructure []string `json:"droppedInfrastructure,omitempty"`
 }
 
 // carriedStages are the stages whose answers survive a chart switch: they hold no chart-specific values.
@@ -68,7 +71,8 @@ const msgOlderRevision = "the profile was saved with revision %d of bundle %s@%s
 
 // ApplyPreset sets role and its preset features; toggles from the loaded values file win over the preset,
 // and user toggles win over both (ADR 0018). It expects a normalised Model, never modifies p's maps and returns p unchanged with any error.
-// Answers are kept within a chart; a chart switch keeps only those of carriedStages the new bundle declares (ADR 0019, 0020).
+// Answers are kept within a chart; a chart switch keeps only those of carriedStages the new bundle declares (ADR 0019, 0020)
+// and drops every infrastructure choice (ADR 0026).
 func (p Profile) ApplyPreset(bundles []model.Bundle, role string, loaded map[string]bool) (Profile, *ChartSwitch, error) {
 	cat, err := CatalogueBundle(bundles, p.Model, p.Catalogue)
 	if err != nil {
@@ -81,6 +85,7 @@ func (p Profile) ApplyPreset(bundles []model.Bundle, role string, loaded map[str
 
 	out := p
 	out.Answers = maps.Clone(p.Answers)
+	out.Infrastructure = cloneInfrastructure(p.Infrastructure)
 	var sw *ChartSwitch
 	if r.Chart != p.Target.Chart {
 		if p.Source != nil {
@@ -94,7 +99,14 @@ func (p Profile) ApplyPreset(bundles []model.Bundle, role string, loaded map[str
 		out.Model = ModelRef{Chart: r.Chart, Version: bundles[i].Version, Revision: bundles[i].Revision}
 		sw.CarriedAnswers, sw.DroppedAnswers = splitAnswers(bundles, p.Model, out.Model, p.Answers)
 		maps.DeleteFunc(out.Answers, func(id string, _ any) bool { return slices.Contains(sw.DroppedAnswers, id) })
+		for _, dep := range sortedKeys(p.Infrastructure) {
+			sw.DroppedInfrastructure = append(sw.DroppedInfrastructure, model.InfrastructureFieldPrefix+dep)
+		}
+		out.Infrastructure = nil
 		out.Open = slices.DeleteFunc(slices.Clone(p.Open), func(q OpenQuestion) bool {
+			if strings.HasPrefix(q.Field, model.InfrastructureFieldPrefix) {
+				return true
+			}
 			id, ok := strings.CutPrefix(q.Field, answersFieldPrefix)
 			return ok && slices.Contains(sw.DroppedAnswers, id)
 		})

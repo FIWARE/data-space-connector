@@ -480,13 +480,22 @@ fan-out (`targets`, `count`, sorted `components`), transitive through derived ho
 `{profile, sourceSha256}` (422 with field errors when the profile does not validate, or when the sha is not the
 loaded file's), renders it with the load the sha names as the overrides layer (none when it is empty, as on save) and
 returns `{tree, diff, derived, handSet, findings, secrets}`. `tree.withheld` lists the mechanisms that did not
-render, and `secrets` (`{namespace, name, key, purpose}`, from `requirements.Secrets`) the Secrets the values reference. `derived` (`render.DerivedDiff`) lists the answers whose default
+render, and `secrets` (`{namespace, name, keys, purpose}`, from `requirements.Secrets`) the Secrets the values reference; rows that name the same Secret merge their keys into one entry, which keeps the first row's purpose. `derived` (`render.DerivedDiff`) lists the answers whose default
 derives from other answers and whose value moved since the previous render: `rederived` (`{id, before, after}`, not
 given) and `pinned` (`{id, kept, before, after}`, given, so kept). Its baseline is dropped on a load, a profile open, a
 source change and a model change, which return empty lists. `handSet` lists the given answers that override a derived
 default, with the value they would derive. The diff groups `added`, `changed`, `removed` and `pinned` entries by foundation, against the
 previous render of the same source. A load, a profile open or a render of another source resets that baseline. A
 pinned leaf is reported only when its rendered value changes (ADR 0020 §7-8).
+
+`GET /api/infrastructure?chart=&version=` lists the Stage 4 dependencies (`{id, title, help, doc, clusterWide,
+modes}`, empty for a bundle without any; 404 for an unknown bundle). A mode carries `{id, label, note, warning, doc,
+development, productionDoc, keys, questions}`, where `keys` are the chart keys it may write. A question carries `{id,
+type, label, help, doc, options, default, when, readOnly, ingress}`; a per-ingress question appears once per
+`ingresses:` row, its id expanded to `<question>.<ingressId>` and `ingress` naming the row (`{id, label, owner}`; the
+row renders only while its `owner` foundation resolves). Every string is bundle data.
+The answers travel in the profile's `infrastructure` map, so `PUT /api/profile` validates them and `POST /api/render`
+renders them (ADR 0026).
 
 ### Rules and findings
 

@@ -16,7 +16,8 @@ type HandSetAnswer struct {
 
 // HandSet lists p's given answers whose foundation derives its default from other answers, in
 // FoundationOrder. A constant default (a choice's) is left out: picking it is not pinning. Unlike
-// Provenance.Pinned, which marks a hand edit of a loaded file, this is about answers.
+// Provenance.Pinned, which marks a hand edit of a loaded file, this is about answers. Synthetic infra.* answers
+// belong to Stage 4 and are left out.
 func HandSet(b model.Bundle, p profile.Profile) ([]HandSetAnswer, error) {
 	r, err := resolve(b, p)
 	if err != nil {
@@ -26,7 +27,7 @@ func HandSet(b model.Bundle, p profile.Profile) ([]HandSetAnswer, error) {
 	for _, id := range b.FoundationOrder() {
 		v, ok := p.Answers[id]
 		f, _ := b.Foundation(id)
-		if !ok || f.DefaultTemplate() == nil || len(f.DefaultRefs()) == 0 {
+		if !ok || model.IsInfraID(id) || f.DefaultTemplate() == nil || len(f.DefaultRefs()) == 0 {
 			continue
 		}
 		d, err := derived(f, r)

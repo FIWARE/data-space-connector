@@ -44,6 +44,15 @@ export interface Answers {
   features: Record<string, FeatureState>
   /** Foundation answers by dotted id (`domain.base`); an absent id is unanswered and renders nothing. */
   values: Record<string, AnswerValue>
+  /** Stage 4 choices by dependency id; answers of an inactive mode are kept for a switch back. */
+  infrastructure: Record<string, InfraChoice>
+}
+
+/** One dependency's mode and its answers by local question id, mirroring `profile.InfraChoice`; `mode` is
+ *  UNANSWERED while none is chosen. */
+export interface InfraChoice {
+  mode: string
+  answers: Record<string, AnswerValue>
 }
 
 /** A foundation answer's value: a string, a `bool` answer or a `credentialTypes` list. */
@@ -63,6 +72,7 @@ export function emptyAnswers(): Answers {
     },
     features: {},
     values: {},
+    infrastructure: {},
   }
 }
 

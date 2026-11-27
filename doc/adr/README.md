@@ -29,6 +29,7 @@ Short records of decisions that are expensive to reverse or easy to re-litigate.
 | [0023](0023-config-tool-pinned-hosts.md) | Pin an overridden host as a given answer, report it in an answer-level diff, check host collisions, and keep hosts sub-domains of the base domain | Proposed | |
 | [0024](0024-config-tool-resource-profile.md) | Default the resource profile from the environment, keep the sizing table as bundle data compiled into per-profile targets, and warn about Java components without a memory limit in production | Proposed | |
 | [0025](0025-config-tool-proxy-and-private-ca.md) | Declare the egress proxy and the private CA once, fanned out through keyed list elements, per-element targets and gated targets, withholding a mechanism that would collide | Proposed | |
+| [0026](0026-config-tool-infrastructure-modes.md) | Model Stage 4 dependencies as three modes compiled into mode-gated synthetic foundations, with one ingresses table and replacing TLS Secret names | Proposed | |
 
 ADRs 0002 and 0003 constrain the consent-facade's own API, so they are **mirrored** in
 [consent-facade](https://github.com/SEAMWARE/consent-facade) under `doc/adr/` with the same numbers. This repository holds the
@@ -38,4 +39,4 @@ Design document ADRs 0001-0005 belong to:
 [`../CONSENT_MANAGEMENT.md`](../CONSENT_MANAGEMENT.md). ADR 0006 belongs to
 [`../deployment-integration/eidas/README.md`](../deployment-integration/eidas/README.md). ADR 0007 belongs to
 [`../deployment-integration/local-deployment/LOCAL.MD`](../deployment-integration/local-deployment/LOCAL.MD). ADRs 0009 to
-0025 belong to [`../config-tool/`](../config-tool/README.md).
+0026 belong to [`../config-tool/`](../config-tool/README.md).

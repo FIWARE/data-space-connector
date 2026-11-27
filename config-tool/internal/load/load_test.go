@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -574,5 +575,44 @@ func TestLoadTIRAddress(t *testing.T) {
 				t.Errorf("answers = %+v, want %s = %v", res.Report.Answers, answerID, tt.answer)
 			}
 		})
+	}
+}
+
+// TestLoadInfrastructureMarkers pins that infra.* answers are not back-derived: their leaves stay owned and the ids
+// are listed as underived.
+func TestLoadInfrastructureMarkers(t *testing.T) {
+	const (
+		issuerID = "infra.certManager.issuer"
+		modeID   = "infra.certManager.mode"
+		leaf     = `keycloak.ingress.annotations."cert-manager.io/cluster-issuer"`
+	)
+	bs, err := model.Versions(fstest.MapFS{fixtureVersion + "/bundle.yaml": {Data: readFile(t, "../model/testdata/infrastructure/valid.yaml")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := header +
+		"# dsc-config:owned " + modeID + "," + issuerID + "\n" +
+		"keycloak:\n  ingress:\n    annotations:\n      cert-manager.io/cluster-issuer: ca-issuer\n" +
+		"# dsc-config:owned " + modeID + "\n" +
+		"cert-manager:\n  enabled: false\n"
+	res, err := Load([]byte(src), "values.yaml", bs, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if i := slices.IndexFunc(res.Report.Answers, func(a Answer) bool { return strings.HasPrefix(a.ID, model.InfraIDPrefix) }); i >= 0 {
+		t.Errorf("answer %+v derived, want no infra.* answer", res.Report.Answers[i])
+	}
+	got := byPath(res.Report)
+	for _, path := range []string{leaf, "cert-manager.enabled"} {
+		if got[path].class != "owned" {
+			t.Errorf("%s is %s, want owned", path, got[path].class)
+		}
+	}
+	var underived []string
+	for _, m := range res.Report.Markers {
+		underived = append(underived, m.Underived...)
+	}
+	if want := []string{modeID, issuerID, modeID}; !slices.Equal(underived, want) {
+		t.Errorf("underived = %v, want %v", underived, want)
 	}
 }

@@ -1,0 +1,105 @@
+# A bundle with cert-manager's three modes over two ingresses: apisix, whose owner target is a ref-less const, and
+# keycloak, whose owner target is a template. database exercises a development mode.
+chart: data-space-connector
+version: 1.0.0
+revision: 1
+topLevelKeys: [keycloak, apisix, cert-manager, certManagerResources, postgres]
+foundations:
+  - id: domain.base
+    stage: foundations
+    type: domain
+    label: Base domain
+    targets:
+      - {path: 'apisix.ingress.tls[0].secretName', fn: const, args: [apisix-provider-tls]}
+  - id: host.keycloak
+    stage: foundations
+    type: hostname
+    default: "keycloak.{{ .domain.base }}"
+    label: Keycloak host
+    targets:
+      - {path: keycloak.ingress.hostname, fn: copy, args: ["{{ .host.keycloak }}"]}
+      - {path: 'keycloak.ingress.tls[0].hosts[0]', fn: tpl, args: ["{{ .host.keycloak }}"]}
+      - {path: 'keycloak.ingress.tls[0].secretName', fn: tpl, args: ["{{ .host.keycloak }}-tls"]}
+ingresses:
+  - {id: apisix, label: APISIX, path: apisix.ingress, owner: domain.base}
+  - {id: keycloak, label: Keycloak, path: keycloak.ingress, owner: host.keycloak}
+infrastructure:
+  - id: certManager
+    title: TLS certificates (cert-manager)
+    clusterWide: true
+    modes:
+      - id: bundled
+        label: Install cert-manager with the connector
+        warning: A cluster can only have one cert-manager.
+        doc: doc/deployment-integration/roles/PREREQUISITES.md#installing-the-operators-once
+        targets:
+          - {path: cert-manager.enabled, fn: const, args: [true]}
+          - {path: certManagerResources.enabled, fn: const, args: [true]}
+        questions:
+          - id: type
+            type: choice
+            label: Issuer
+            default: selfsigned
+            options:
+              - {value: selfsigned, label: Self-signed, note: For testing only.}
+              - {value: prod, label: "Let's Encrypt"}
+            targets: [{path: certManagerResources.type, fn: copy, args: ["{{ .infra.certManager.type }}"]}]
+          - id: acmeEmail
+            type: email
+            label: ACME contact
+            when: {question: type, equals: prod}
+            targets: [{path: certManagerResources.acmeEmail, fn: copy, args: ["{{ .infra.certManager.acmeEmail }}"]}]
+          - id: namespace
+            type: string
+            label: Namespace
+            readOnly: true
+            default: "{{ .target.namespace }}"
+            when: {question: type, equals: selfsigned}
+            targets: [{path: certManagerResources.namespace, fn: copy, args: ["{{ .infra.certManager.namespace }}"]}]
+        perIngress:
+          - {key: 'annotations."cert-manager.io/cluster-issuer"', fn: tpl, args: ["{{ .infra.certManager.type }}-issuer"]}
+      - id: cluster
+        label: Use the cert-manager already in the cluster
+        targets:
+          - {path: cert-manager.enabled, fn: const, args: [false]}
+          - {path: certManagerResources.enabled, fn: const, args: [false]}
+        questions:
+          - {id: issuer, type: hostname, label: ClusterIssuer}
+        perIngress:
+          - {key: 'annotations."cert-manager.io/cluster-issuer"', fn: copy, args: ["{{ .infra.certManager.issuer }}"]}
+      - id: external
+        label: I provide a TLS Secret per host
+        targets:
+          - {path: cert-manager.enabled, fn: const, args: [false]}
+          - {path: certManagerResources.enabled, fn: const, args: [false]}
+        perIngressQuestion:
+          id: secret
+          type: secretName
+          label: TLS Secret
+          key: 'tls[0].secretName'
+          replaces: true
+          requirement: {kind: secret, keys: [tls.crt, tls.key], purpose: The certificate and key of the host.}
+  - id: database
+    title: Database
+    modes:
+      - id: bundled
+        label: Install a database with the connector
+        development: true
+        productionDoc: doc/deployment-integration/roles/PREREQUISITES.md
+        targets: [{path: postgres.enabled, fn: const, args: [true]}]
+      - id: external
+        label: Use an external database
+        targets: [{path: postgres.enabled, fn: const, args: [false]}]
+        questions: [{id: credentials, type: secretName, label: Credentials Secret}]
+        requirements: [{kind: secret, name: "{{ .infra.database.credentials }}", key: password, purpose: The database password.}]
+rules:
+  - id: acme-email-for-prod-issuer
+    severity: error
+    stage: infrastructure
+    field: infrastructure.certManager.acmeEmail
+    when:
+      - {field: infrastructure.certManager, equals: bundled}
+      - {field: infrastructure.certManager.type, equals: prod}
+      - {field: infrastructure.certManager.acmeEmail, unset: true}
+    message: Let's Encrypt needs a contact address.
+    doc: doc/deployment-integration/roles/PREREQUISITES.md

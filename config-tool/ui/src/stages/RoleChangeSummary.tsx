@@ -1,6 +1,8 @@
 /** What a role change turns on, turns off and keeps, and what a chart switch carries over (ADR 0019). */
 import { useId } from 'react'
+import type { Dependency } from '../api/infrastructure'
 import type { ChartSwitch, RoleCatalogue, RoleChange } from '../api/roles'
+import { fieldLabel, type InfraFieldId } from '../state/openQuestions'
 import {
   CARRIED_FIELDS,
   CARRIED_OVER,
@@ -31,8 +33,19 @@ function Section({ heading, rows }: { heading: string; rows: readonly { key: str
   )
 }
 
-/** Renders a RoleChange with catalogue titles (falling back to the id); each feature id shows in one section only. */
-export function RoleChangeSummary({ change, chartSwitch, catalogue }: { change: RoleChange; chartSwitch: ChartSwitch | null; catalogue?: RoleCatalogue }) {
+/** Renders a RoleChange with catalogue titles (falling back to the id); each feature id shows in one section only.
+ *  `dependencies` are the old chart's, naming the dropped infrastructure choices. */
+export function RoleChangeSummary({
+  change,
+  chartSwitch,
+  catalogue,
+  dependencies,
+}: {
+  change: RoleChange
+  chartSwitch: ChartSwitch | null
+  catalogue?: RoleCatalogue
+  dependencies?: readonly Dependency[]
+}) {
   const title = (id: string) => catalogue?.features.find((f) => f.id === id)?.title ?? id
   const features = (ids: readonly string[]) => ids.map((id) => ({ key: id, text: title(id) }))
   const kept = change.kept.map((k) => ({ key: k.id, text: `${title(k.id)}: ${k.enabled ? 'on' : 'off'}, ${KEPT_REASON[k.source]}` }))
@@ -58,6 +71,7 @@ export function RoleChangeSummary({ change, chartSwitch, catalogue }: { change: 
               { key: 'choices', text: droppedFeatureChoices(chartSwitch) },
               ...features(chartSwitch.droppedChoices.filter((id) => !listed.has(id))),
               ...chartSwitch.droppedAnswers.map((id) => ({ key: `answer:${id}`, text: id })),
+              ...(chartSwitch.droppedInfrastructure ?? []).map((id) => ({ key: id, text: fieldLabel(id as InfraFieldId, [], dependencies) })),
             ]}
           />
         </>

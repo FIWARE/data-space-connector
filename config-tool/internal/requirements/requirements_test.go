@@ -41,9 +41,9 @@ func TestSecrets(t *testing.T) {
 		want    []Secret
 	}{
 		{"the private CA", map[string]any{caSecret: "corp-ca"}, profile.Target{Namespace: namespace},
-			[]Secret{{Namespace: namespace, Name: "corp-ca", Key: "ca.crt", Purpose: purpose}}},
+			[]Secret{{Namespace: namespace, Name: "corp-ca", Keys: []string{"ca.crt"}, Purpose: purpose}}},
 		{"no namespace yet", map[string]any{caSecret: "corp-ca"}, profile.Target{},
-			[]Secret{{Name: "corp-ca", Key: "ca.crt", Purpose: purpose}}},
+			[]Secret{{Name: "corp-ca", Keys: []string{"ca.crt"}, Purpose: purpose}}},
 		{"unanswered", map[string]any{"proxy.https": "http://proxy:3128"}, profile.Target{Namespace: namespace}, nil},
 	}
 	for _, tc := range tests {

@@ -32,7 +32,8 @@ type PinnedAnswer struct {
 
 // DerivedDiff compares the derived answers of prev and next in FoundationOrder, each resolved with its own
 // target (environment, release and namespace). A prev of another chart or
-// version than b is no baseline, so the diff is empty; next must be on b.
+// version than b is no baseline, so the diff is empty; next must be on b. Synthetic infra.* answers belong to
+// Stage 4 and are left out.
 func DerivedDiff(b model.Bundle, prev, next profile.Profile) (AnswerDiff, error) {
 	diff := AnswerDiff{Rederived: []DerivedChange{}, Pinned: []PinnedAnswer{}}
 	if prev.Model.Chart != b.Chart || prev.Model.Version != b.Version {
@@ -48,7 +49,7 @@ func DerivedDiff(b model.Bundle, prev, next profile.Profile) (AnswerDiff, error)
 	}
 	for _, id := range b.FoundationOrder() {
 		f, _ := b.Foundation(id)
-		if f.DefaultTemplate() == nil || len(f.DefaultRefs()) == 0 {
+		if model.IsInfraID(id) || f.DefaultTemplate() == nil || len(f.DefaultRefs()) == 0 {
 			continue
 		}
 		kept, given := next.Answers[id]

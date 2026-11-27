@@ -1,6 +1,7 @@
 /** Save, open and list `.dscprofile.yaml` profiles through the loopback API (ADR 0015). */
-import { emptyAnswers, type Answers, type AnswerValue, type FeatureState, type Target } from '../state/answers'
+import { emptyAnswers, type Answers, type AnswerValue, type FeatureState, type InfraChoice, type Target } from '../state/answers'
 import { reservedRefs, validAnswers } from '../state/foundations'
+import { validInfrastructure } from '../state/infrastructure'
 import { isFieldId, type FieldId } from '../state/openQuestions'
 import type { AppState } from '../state/reducer'
 import { api } from './client'
@@ -43,6 +44,8 @@ export interface Profile {
   role?: string
   features?: Record<string, FeatureState>
   answers: Record<string, unknown> | null
+  /** Stage 4's choices by dependency id; `answers` is left out while a dependency has none. */
+  infrastructure?: Record<string, { mode: string; answers?: Record<string, unknown> }>
   open: { field: string }[] | null
   source?: ProfileSource
   secrets: Record<string, unknown> | null
@@ -75,7 +78,7 @@ export interface RecentProfiles {
 /** The profile the UI's state stands for; the server fills in format, model and secrets and owns `catalogue`.
  *  An answer with a format error is left out, so one bad field does not make every profile request a 422. */
 export function toProfile(state: AppState): Profile {
-  const { target, role, features, values } = state.answers
+  const { target, role, features, values, infrastructure } = state.answers
   return {
     format: PROFILE_FORMAT,
     model: state.profileModel ?? { chart: target.chart, version: '', revision: 0 },
@@ -84,6 +87,7 @@ export function toProfile(state: AppState): Profile {
     role,
     features,
     answers: validAnswers(values, state.foundations, reservedRefs(target)),
+    infrastructure: validInfrastructure(infrastructure, state.dependencies),
     open: state.open.map((field) => ({ field })),
     secrets: {},
   }
@@ -98,6 +102,10 @@ function isAnswerValue(v: unknown): v is AnswerValue {
   return typeof v === 'string' || typeof v === 'boolean' || Array.isArray(v)
 }
 
+function infraChoices(infrastructure: Profile['infrastructure']): Record<string, InfraChoice> {
+  return Object.fromEntries(Object.entries(infrastructure ?? {}).map(([dep, c]) => [dep, { mode: c.mode, answers: answerValues(c.answers ?? null) }]))
+}
+
 /** The answers and markers a profile restores; the server has validated its open ids already. */
 export function fromProfile(profile: Profile): { answers: Answers; open: FieldId[] } {
   const answers = emptyAnswers()
@@ -105,6 +113,7 @@ export function fromProfile(profile: Profile): { answers: Answers; open: FieldId
   answers.role = profile.role
   answers.features = profile.features ?? {}
   answers.values = answerValues(profile.answers)
+  answers.infrastructure = infraChoices(profile.infrastructure)
   const open = (profile.open ?? []).map((q) => q.field).filter(isFieldId)
   return { answers, open: [...new Set(open)].sort() }
 }
