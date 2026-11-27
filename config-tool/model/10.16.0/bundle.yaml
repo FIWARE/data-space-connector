@@ -4,8 +4,8 @@
 #
 # The foundations list (ADR 0020) holds the cross-cutting answers of Stage 3 and the chart keys they reach:
 #   id       dotted answer id (domain.base): the key in the profile's answers, open field answers.<id>
-#   type     string | hostname | domain | did | url | secretName | email, each checked with one pattern; choice, one
-#            of its options;
+#   type     string | hostname | domain | did | url | secretName | resourceName | email, each checked with one
+#            pattern; choice, one of its options;
 #            bool, true or false; credentialTypes, a list of {type, description?}. Only copy writes a bool or a list
 #   group    organization | dataspace | network (default) | platform | egress: the Stage 3 panel that asks it
 #   options  a choice's {value, label, note}; note is optional text shown at the point of choice
@@ -706,7 +706,7 @@ infrastructure:
             when: {question: type, equals: prod}
             targets: [{path: certManagerResources.acmeEmail, fn: copy, args: ["{{ .infra.certManager.acmeEmail }}"]}]
           - id: ingressClass
-            type: hostname
+            type: resourceName
             label: Ingress class
             help: >-
               The ingress class of the controller that serves Let's Encrypt's HTTP-01 challenge, for example nginx
@@ -715,7 +715,7 @@ infrastructure:
             targets: [{path: certManagerResources.ingressClass, fn: copy, args: ["{{ .infra.certManager.ingressClass }}"]}]
           # A bundled cert-manager runs in the release namespace, where the CA ClusterIssuer finds ca-secret.
           - id: namespace
-            type: hostname
+            type: resourceName
             label: Namespace
             help: The namespace cert-manager runs in, where the self-signed CA's Secret is created.
             readOnly: true
@@ -732,7 +732,7 @@ infrastructure:
           - {path: certManagerResources.enabled, fn: const, args: [false]}
         questions:
           - id: issuer
-            type: hostname
+            type: resourceName
             label: ClusterIssuer
             help: >-
               The ClusterIssuer that signs the certificates of every public host. A namespaced Issuer is not

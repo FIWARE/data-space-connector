@@ -42,6 +42,9 @@ const (
 	TypeCredentialTypes FoundationType = "credentialTypes"
 	// TypeSecretName is the name of a Kubernetes Secret: a DNS-1123 subdomain, like TypeHostname.
 	TypeSecretName FoundationType = "secretName"
+	// TypeResourceName is the name of another Kubernetes object (a ClusterIssuer, an IngressClass, a namespace): a
+	// DNS-1123 subdomain, worded as a name, not a host.
+	TypeResourceName FoundationType = "resourceName"
 	// TypeEmail is local@domain, the domain a TypeDomain that is no RFC 2606 example or test name, so a chart's
 	// placeholder contact can never pass.
 	TypeEmail FoundationType = "email"
@@ -102,7 +105,7 @@ var (
 )
 
 var (
-	knownTypes = []FoundationType{TypeString, TypeHostname, TypeDomain, TypeChoice, TypeDID, TypeURL, TypeBool, TypeCredentialTypes, TypeSecretName, TypeEmail}
+	knownTypes = []FoundationType{TypeString, TypeHostname, TypeDomain, TypeChoice, TypeDID, TypeURL, TypeBool, TypeCredentialTypes, TypeSecretName, TypeResourceName, TypeEmail}
 	knownFns   = []Fn{FnTpl, FnJoin, FnCopy, FnConst}
 	// knownFoundationGroups are the Stage 3 panels, in screen order.
 	knownFoundationGroups = []FoundationGroup{GroupOrganization, GroupDataspace, GroupNetwork, GroupPlatform, GroupEgress}
@@ -385,6 +388,10 @@ func (t FoundationType) Check(v any) error {
 	case TypeSecretName:
 		if len(s) > maxHostnameLength || !hostname.MatchString(s) {
 			return fmt.Errorf("must be a Secret name of lowercase letters, digits, '-' and '.', at most %d characters", maxHostnameLength)
+		}
+	case TypeResourceName:
+		if len(s) > maxHostnameLength || !hostname.MatchString(s) {
+			return fmt.Errorf("must be a Kubernetes name of lowercase letters, digits, '-' and '.', at most %d characters", maxHostnameLength)
 		}
 	case TypeDID:
 		if !did.MatchString(s) {
