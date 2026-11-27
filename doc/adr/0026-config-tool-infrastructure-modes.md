@@ -60,7 +60,9 @@ is a gate too, so mode targets are plain `const` targets. An unconditioned top-l
 
 A condition compares a string, so it may only name a string-typed answer (a choice, string, hostname, ...); a `when` on a
 `bool` or `credentialTypes` answer is a compile error, because it could never hold. A question `when` is checked on its
-own, so a gated question without targets is refused too.
+own, so a gated question without targets is refused too. A question `when` may not name a question that has a `when` of
+its own: conditions do not chain, so a shown question never depends on a hidden one, and two questions cannot gate
+each other.
 
 Requirement rows (Secrets listed for NEXT_STEPS.md) get the same `When` gating and an optional `keys` list (exactly one
 of `key`/`keys`). In `external`, each per-ingress Secret is listed once, with keys `tls.crt` and `tls.key`, and only

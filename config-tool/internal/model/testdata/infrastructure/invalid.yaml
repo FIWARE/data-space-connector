@@ -150,6 +150,31 @@
             questions:
               - {id: kind, type: choice, label: Kind, options: [{value: plain, label: Plain}]}
               - {id: port, type: string, label: Port, when: {question: kind, equals: managed}}
+- name: question when naming a gated question
+  err: 'questions[2] (port): when: tier has a when of its own; conditions do not chain'
+  override:
+    infrastructure:
+      - id: db
+        title: DB
+        modes:
+          - id: external
+            label: External
+            questions:
+              - {id: kind, type: choice, label: Kind, options: [{value: plain, label: Plain}, {value: managed, label: Managed}]}
+              - {id: tier, type: choice, label: Tier, options: [{value: small, label: Small}], when: {question: kind, equals: managed}}
+              - {id: port, type: string, label: Port, when: {question: tier, equals: small}}
+- name: question when cycle
+  err: 'questions[0] (kind): when: tier has a when of its own; conditions do not chain'
+  override:
+    infrastructure:
+      - id: db
+        title: DB
+        modes:
+          - id: external
+            label: External
+            questions:
+              - {id: kind, type: choice, label: Kind, options: [{value: plain, label: Plain}], when: {question: tier, equals: small}}
+              - {id: tier, type: choice, label: Tier, options: [{value: small, label: Small}], when: {question: kind, equals: plain}}
 - name: question when on a bool question, gated question without targets
   err: 'questions[1] (port): when: tls is a bool; a condition compares a string answer'
   override:
