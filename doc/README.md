@@ -17,6 +17,7 @@ specific flows and its deployment and integration with other frameworks.
   - [Contract Management](#contract-management)
   - [M2M Service Interaction](#m2m-service-interaction)
   - [Consent Management](#consent-management)
+  - [Data Space Eventing](#data-space-eventing)
 - [Deployment / Integration](#deployment--integration)
   - [Quick Start Guide](#quick-start-guide)
   - [Reference profiles](#reference-profiles)
@@ -66,6 +67,21 @@ data access flow are documented here:
   API, authentication with the VCVerifier JWT, the consent-filter plugin, deployment and the
   migration from the MongoDB-based consent-manager
 * [Architecture Decision Records](./adr/README.md)
+
+### Data Space Eventing
+
+Participants publish events to, and subscribe at, other participants of the data space. The mechanism and the
+wire contract are documented here:
+* [Overview and demo](./EVENTING.md) - the removal flow, the components in the local deployment, the demo and
+  the integration test
+* [How it works](./eventing/architecture.md) - the problem, the event model, trust and authorization,
+  delivery, detection, attribution and reconciliation
+* [Interoperability specification](./eventing/specification.md) - normative contract a non-FIWARE
+  implementation must follow to publish events to, or subscribe at, a FIWARE participant
+* [Participant setup](./eventing/participant-setup.md) - what the connector does with the data space's
+  events, and how to enable it: contract-management, the gateway routes, the verifier service and the ODRL policy
+* [Trust anchor setup](./eventing/trust-anchor-setup.md) - running the publisher that watches the TIR and
+  announces removed participants
 
 
 

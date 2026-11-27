@@ -158,7 +158,10 @@ pom.xml                       # drives local-deploy + integration tests
   `before-hook-creation`, so they are recreated.
 
 ## Documentation
-
+- Docs are link-checked by `.github/scripts/check-links.sh` (lychee in Docker, `lychee.toml`, offline): every
+  relative link and `#anchor` in Markdown must resolve. `doc/README.md` keeps a
+  doctoc ToC between the `START doctoc`/`END doctoc` markers -- update it
+  when adding a heading.
 - Every architectural decision should be documented in the ADR format in the folder doc/adr
 - Every new/modified feature should be documented in the README.md or its corresponding markdown document in doc/
 
@@ -240,9 +243,39 @@ ports 8080 API / 9090 management).
 - The consent-filter plugin source is NOT in this repo; only its tag and
   route config live here.
 
+## Data Space Eventing (ticket-97 epic)
+- Docs: `doc/eventing/architecture.md` is the non-normative "how it works"
+  (§3 events, §4 trust, §5 delivery, §6 detection, §7-§9 attribution, reaction,
+  reconciliation); the decisions are ADRs 0009-0017, not a register in it. The
+  design-phase `ticket.md`/`questions.md` were removed in ticket-106.
+- Wire contract of record: FIWARE/contract-management `api/dataspace-events.yaml`
+  (`POST`/`OPTIONS /events`, `POST /subscriptions`,
+  `DELETE /subscriptions/{subscriptionId}`), code in `org.fiware.iam.dataspace.*`.
+  It wins over `specification.md`, which wins over `architecture.md`.
+- Interop spec: `doc/eventing/specification.md`.
+- Participant side in this chart (ticket-102): CM config lives at `contract-management.dataspace.events`
+  (Micronaut tree, kebab-case, verbatim). The CM subchart renders it into its own refreshable ConfigMap
+  (no `subPath`); the umbrella never templates it. Feature needs CM ≥ 3.5.3.
+- TIL `POST /issuer?scope=&scopeType=` -- `scopeType` enum is `dataspace-membership`.
+- APISIX routes are a subchart list (`decentralizedIam.odrlAuthorization.apisix.routes`): the
+  umbrella cannot inject a gated route, so the events route is a documented snippet.
+- CI runs `helm unittest` without `helm dependency build`: suites can only target `templates/`.
+- Trust anchor side (ticket-106): the publisher is the `contract-management` of the
+  `consent-authority` release (DSC chart, ns `trust-anchor`, identity `did:web:dataspace-authority.org`,
+  key secret `dataspace-authority.org-tls`, OperatorCredential in secret `vc-operator-credential`).
+- CM 3.5.3 publisher gotchas: chart `notification.enabled: false` does not disable notifications (set
+  env `NOTIFICATION_ENABLED=false`, copying the OTEL `additionalEnvVars` list); the TIR watcher reads
+  the Micronaut service `services.trusted-issuers-registry` (no URL key under `tir-watcher`); CM trusts
+  `X-Userinfo`, so `/subscriptions` needs a gateway route like `/events`. Management port 9090 serves
+  `POST /events` (manual publish, returns `subscriptions` count), `GET /participants-removed`
+  (report) and `POST /refresh`; there is no reconcile trigger (it runs once after
+  `participant-removed.reconcile.initial-delay`, then every `interval`).
+- IT: `StandardStepDefinitions`' `@Before("not @consent and not @eidas")` wipes the provider TIL;
+  every new tag must be excluded there. In-cluster, `*.127.0.0.1.nip.io` resolves to Traefik (coredns).
+
 ## Important Files
 - `charts/data-space-connector/Chart.yaml` -- dependency graph (current
-  version 11.0.0).
+  version 11.1.0).
 - `charts/data-space-connector/values.yaml` -- ~4190-line config surface;
   top-level sections start at these approximate line numbers:
   `decentralizedIam` (26), `scorpio` (291), `keycloak` (420),

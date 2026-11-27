@@ -145,6 +145,11 @@ The [Contract Management](https://github.com/FIWARE/contract-management) compone
 
 > **Note:** If the data space uses a [central marketplace](../../../CENTRAL_MARKETPLACE.md), the Contract Management component requires specific configuration to work with it. See the [Central Marketplace documentation](../../../CENTRAL_MARKETPLACE.md) for details on how to configure Contract Management in that scenario.
 
+> **Note:** Contract Management can also subscribe to the data space's events and react when the
+> authority removes a participant. It is off by default, and once enabled its default mode `report`
+> only records which grants the removed participant holds. See the
+> [participant setup](../../../eventing/participant-setup.md).
+
 > **Note:** The policies and the credential configuration are read from the ordered `ProductSpecification` by default. A product can instead be composed of `ServiceSpecification`s that carry their own policies - an access policy protects an API, and in TMForum an API is a `ServiceSpecification`. See [Authoring a composed ProductSpecification](./COMPOSED_SPECIFICATIONS.md).
 
 ### Marketplace (BAE)
