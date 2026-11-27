@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { fetchFoundations } from '../api/foundations'
 import { fetchInfrastructure } from '../api/infrastructure'
 import { useStore } from '../state/context'
+import type { Action } from '../state/reducer'
 
 /** Why the last load failed; undefined while it has not. */
 export const BundleDataError = createContext<string | undefined>(undefined)
@@ -13,41 +14,57 @@ export function useBundleDataError(): string | undefined {
   return useContext(BundleDataError)
 }
 
-/** Fetches the dependencies on every chart or version change and the foundations while unknown; returns the error. */
-export function useBundleData(): string | undefined {
-  const { state, dispatch } = useStore()
-  const { chart, chartVersion } = state.answers.target
-  const [error, setError] = useState<string>()
-  const dependenciesKnown = state.dependencies !== undefined
-  const foundationsKnown = state.foundations !== undefined
-  // A version change keeps the same chart's dependencies in the store, so the key tells a stale list apart.
+type Load = (chart: string, version: string, signal: AbortSignal) => Promise<Action>
+
+const loadInfrastructure: Load = (chart, version, signal) =>
+  fetchInfrastructure(chart, version, signal).then((list) => ({ type: 'infrastructureLoaded', dependencies: list.dependencies }))
+
+const loadFoundations: Load = (chart, version, signal) =>
+  fetchFoundations(chart, version, signal).then((list) => ({ type: 'foundationsLoaded', foundations: list.foundations }))
+
+const INFRASTRUCTURE_FAILED: Action = { type: 'infrastructureFailed' }
+
+/** Fetches and dispatches `load` once per chart@version, unless the store already holds what was loaded for it;
+ *  returns this key's fetch error. A failure dispatches `failed`, so a list of another version is not counted. */
+function useKeyedLoad(chart: string, chartVersion: string, known: boolean, load: Load, failed?: Action): string | undefined {
+  const { dispatch } = useStore()
+  const [error, setError] = useState<{ key: string; message: string }>()
+  // A version change keeps the old list in the store, so `known` alone cannot tell it is stale.
   const loadedFor = useRef('')
+  // Without this, `failed` clearing the store would retry the same key at once.
+  const failedFor = useRef('')
+  const key = `${chart}@${chartVersion}`
 
   useEffect(() => {
-    const key = `${chart}@${chartVersion}`
-    if (chart === '' || (dependenciesKnown && loadedFor.current === key)) return
+    if (chart === '' || (known ? loadedFor.current : failedFor.current) === key) return
     const controller = new AbortController()
-    fetchInfrastructure(chart, chartVersion, controller.signal).then(
-      (list) => {
+    load(chart, chartVersion, controller.signal).then(
+      (action) => {
         loadedFor.current = key
+        failedFor.current = ''
         setError(undefined)
-        dispatch({ type: 'infrastructureLoaded', dependencies: list.dependencies })
+        dispatch(action)
       },
-      (err: Error) => controller.signal.aborted || setError(err.message),
+      (err: Error) => {
+        if (controller.signal.aborted) return
+        failedFor.current = key
+        loadedFor.current = ''
+        setError({ key, message: err.message })
+        if (failed) dispatch(failed)
+      },
     )
     return () => controller.abort()
-  }, [chart, chartVersion, dependenciesKnown, dispatch])
+  }, [chart, chartVersion, key, known, load, failed, dispatch])
 
-  // The per-host defaults derive from Stage 3's hosts, so their foundations are needed even if Stage 3 was skipped.
-  useEffect(() => {
-    if (chart === '' || foundationsKnown) return
-    const controller = new AbortController()
-    fetchFoundations(chart, chartVersion, controller.signal).then(
-      (list) => dispatch({ type: 'foundationsLoaded', foundations: list.foundations }),
-      (err: Error) => controller.signal.aborted || setError(err.message),
-    )
-    return () => controller.abort()
-  }, [chart, chartVersion, foundationsKnown, dispatch])
+  return error?.key === key ? error.message : undefined
+}
 
-  return error
+/** Loads the dependencies and the foundations (the per-host defaults derive from Stage 3's hosts, even if Stage 3
+ *  was skipped) for the current chart@version; returns the first fetch error. */
+export function useBundleData(): string | undefined {
+  const { state } = useStore()
+  const { chart, chartVersion } = state.answers.target
+  const infraError = useKeyedLoad(chart, chartVersion, state.dependencies !== undefined, loadInfrastructure, INFRASTRUCTURE_FAILED)
+  const foundationsError = useKeyedLoad(chart, chartVersion, state.foundations !== undefined, loadFoundations)
+  return infraError ?? foundationsError
 }

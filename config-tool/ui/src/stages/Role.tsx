@@ -243,7 +243,7 @@ export function Role() {
             apply(proposal.result)
           }}
         >
-          <RoleChangeSummary change={proposal.change} chartSwitch={proposal.result.chartSwitch} catalogue={catalogue} />
+          <RoleChangeSummary change={proposal.change} chartSwitch={proposal.result.chartSwitch} catalogue={catalogue} dependencies={state.dependencies} />
         </ConfirmDialog>
       )}
       {selected && catalogue && <Selection role={selected} catalogue={catalogue} />}

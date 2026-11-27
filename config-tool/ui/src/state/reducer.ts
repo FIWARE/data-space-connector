@@ -61,6 +61,8 @@ export interface AppState {
 export interface AppliedRoleChange {
   change: RoleChange
   chartSwitch: ChartSwitch | null
+  /** The old chart's dependencies, which name the dropped infrastructure choices once the new chart's are loaded. */
+  dependencies?: readonly Dependency[]
 }
 
 /** A role that no longer fits the target chart, cleared by a chart change. */
@@ -93,6 +95,7 @@ export type Action =
   | { type: 'tirChecked'; check: TirCheck }
   | { type: 'foundationsLoaded'; foundations: readonly Foundation[] }
   | { type: 'infrastructureLoaded'; dependencies: readonly Dependency[] }
+  | { type: 'infrastructureFailed' }
   | { type: 'setInfraMode'; dependency: string; mode: string }
   | { type: 'setInfraAnswer'; dependency: string; question: string; value: AnswerValue }
 
@@ -193,7 +196,7 @@ function roleApplied(state: AppState, { profile, chartSwitch, change }: Extract<
     versionOpen: chartSwitch !== null || state.versionOpen,
     chartSwitch: chartSwitch ?? undefined,
     roleCleared: undefined,
-    roleChanges: change ? [...state.roleChanges, { change, chartSwitch }] : state.roleChanges,
+    roleChanges: change ? [...state.roleChanges, { change, chartSwitch, dependencies: chartSwitch ? state.dependencies : undefined }] : state.roleChanges,
   }
 }
 
@@ -331,6 +334,9 @@ export function reducer(state: AppState, action: Action): AppState {
       return foundationsLoaded(state, action.foundations)
     case 'infrastructureLoaded':
       return infrastructureLoaded(state, action.dependencies)
+    // Another version's list would count the wrong questions; the answers stay until a list is loaded.
+    case 'infrastructureFailed':
+      return state.dependencies === undefined ? state : { ...state, dependencies: undefined }
     case 'setInfraMode': {
       const infrastructure = setInfraMode(state.answers.infrastructure, action.dependency, action.mode)
       return { ...state, answers: { ...state.answers, infrastructure } }

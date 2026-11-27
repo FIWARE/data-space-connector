@@ -800,6 +800,11 @@ export const CERT_MANAGER: Dependency = {
   ],
 }
 
+/** The server's message for a refused infrastructure request. */
+export function refusedInfrastructure(status: number): string {
+  return `infrastructure request refused with ${status}`
+}
+
 /** The dependencies GET /api/infrastructure answers by default. */
 export const INFRASTRUCTURE: InfrastructureList = { dependencies: [CERT_MANAGER] }
 
@@ -816,7 +821,7 @@ export function mockApi(
   roles: RoleFakes = {},
   foundations: FoundationFakes = {},
   dataspace: DataspaceFakes = {},
-  infrastructure: () => InfrastructureList = () => INFRASTRUCTURE,
+  infrastructure: (chart: string, version: string) => FoundationAnswer<InfrastructureList> = () => INFRASTRUCTURE,
 ) {
   const fakes = { ...PROFILE_DEFAULTS, ...profiles }
   const trialFakes = { ...TRIAL_DEFAULTS, ...trial }
@@ -877,7 +882,10 @@ export function mockApi(
     if (url.pathname === '/api/dataspace/import' && init?.method === 'POST') {
       return dataspaceAnswer(await dataspaceFakes.import(JSON.parse(String(init.body)) as ImportBody))
     }
-    if (url.pathname === '/api/infrastructure') return json(infrastructure())
+    if (url.pathname === '/api/infrastructure') {
+      const answer = infrastructure(url.searchParams.get('chart') ?? '', url.searchParams.get('version') ?? '')
+      return typeof answer === 'number' ? json({ error: refusedInfrastructure(answer) }, answer) : json(answer)
+    }
     return json({ error: 'not found' }, HTTP_NOT_FOUND)
   })
   vi.stubGlobal('fetch', fetchMock)

@@ -23,7 +23,7 @@ const EXTERNAL = 'I provide a TLS Secret per host'
 const ACME_FIELD = 'infrastructure.certManager.acmeEmail'
 const PRODUCTION_DOC = 'doc/deployment-integration/roles/PREREQUISITES.md#production'
 
-function onInfrastructure(values: Record<string, AnswerValue>): AppState {
+function onInfrastructure(values: Record<string, AnswerValue>, namespace: string): AppState {
   return {
     ...initialState,
     entered: true,
@@ -32,7 +32,7 @@ function onInfrastructure(values: Record<string, AnswerValue>): AppState {
     answers: {
       ...initialState.answers,
       role: 'provider',
-      target: { ...initialState.answers.target, releaseName: 'provider', namespace: NAMESPACE },
+      target: { ...initialState.answers.target, releaseName: 'provider', namespace },
       values,
     },
   }
@@ -47,10 +47,11 @@ function renderStage({
   dependencies = [CERT_MANAGER],
   findings = [],
   values = { 'domain.base': DOMAIN },
-}: { dependencies?: Dependency[]; findings?: Finding[]; values?: Record<string, AnswerValue> } = {}) {
+  namespace = NAMESPACE,
+}: { dependencies?: Dependency[]; findings?: Finding[]; values?: Record<string, AnswerValue>; namespace?: string } = {}) {
   mockApi(undefined, undefined, undefined, {}, {}, {}, { foundations: () => FOUNDATIONS, render: findingsRender(findings) }, {}, () => ({ dependencies }))
   render(
-    <StoreProvider initial={onInfrastructure(values)}>
+    <StoreProvider initial={onInfrastructure(values, namespace)}>
       <Chrome stages={STAGES} />
     </StoreProvider>,
   )
@@ -112,6 +113,15 @@ describe('Infrastructure', () => {
     const group = await card()
     expect(within(group).getByLabelText('APISIX')).toHaveValue('apisix-provider-tls')
     expect(within(group).getByLabelText('Keycloak')).toHaveValue(`keycloak.${DOMAIN}-tls`)
+  })
+
+  it('does not count the read-only Namespace while the target namespace is empty; Target counts that', async () => {
+    renderStage({ namespace: '' })
+    await card()
+    const unchosen = openCount()
+    await choose(BUNDLED)
+    expect(within(await card()).getByLabelText('Namespace')).toBeInTheDocument()
+    expect(openCount()).toBe(unchosen - 1)
   })
 
   it('holds back the Secret rows of ingresses whose host is unknown, without counting them', async () => {

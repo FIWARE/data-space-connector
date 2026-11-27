@@ -109,14 +109,15 @@ export function shownFields(infrastructure: Record<string, InfraChoice>, depende
   })
 }
 
-/** The Stage 4 fields that are unanswered: an unchosen mode, a shown question with neither a given nor a derived answer. */
+/** The Stage 4 fields that are unanswered: an unchosen mode, a shown question with neither a given nor a derived answer.
+ *  A read-only question cannot be answered here, so only its marker counts it; its unresolved ref is counted where asked. */
 export function unansweredInfra(infrastructure: Record<string, InfraChoice>, dependencies: readonly Dependency[], ctx: InfraContext): InfraFieldId[] {
   return dependencies.flatMap((dep) => {
     const choice = choiceOf(infrastructure, dep.id)
     const mode = activeMode(dep, choice)
     if (!mode) return [infraModeFieldId(dep.id)]
     return shownQuestions(mode, choice, ctx)
-      .filter((q) => questionValue(q, choice, ctx) === undefined)
+      .filter((q) => !q.readOnly && questionValue(q, choice, ctx) === undefined)
       .map((q) => infraQuestionFieldId(dep.id, q.id))
   })
 }
